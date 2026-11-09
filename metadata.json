@@ -1,0 +1,6 @@
+{
+  "name": "Muzibu - Telifsiz Müzik Platformu",
+  "description": "Profesyonel telifsiz müzik yayını, mağaza ve mekan fon müzikleri, lisanslama ve müzik yönetim platformu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
