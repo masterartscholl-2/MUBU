@@ -74,6 +74,27 @@ export interface RadioStation {
   listenersCount: number;
   currentTrackId?: string;
   badgeTitle?: string;
+  trackIds?: string[];
+}
+
+export interface GenreCategory {
+  id?: string;
+  name: string;
+  badgeTitle: string;
+  tracksCount: number;
+  coverUrl: string;
+  desc: string;
+}
+
+export interface VenueSector {
+  id?: string;
+  name: string;
+  badgeTitle: string;
+  icon?: string;
+  tracksCount: number;
+  coverUrl: string;
+  desc: string;
+  genres: string[];
 }
 
 export interface LicenseRecord {

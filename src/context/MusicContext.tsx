@@ -1,12 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { Track, Playlist, RadioStation, UserProfile, LicenseRecord, CartItem, VenueLocation } from '../types';
-import { INITIAL_TRACKS, INITIAL_PLAYLISTS, INITIAL_RADIOS, DEFAULT_USER } from '../data/initialData';
+import { Track, Playlist, RadioStation, UserProfile, LicenseRecord, CartItem, VenueLocation, GenreCategory, VenueSector } from '../types';
+import { INITIAL_TRACKS, INITIAL_PLAYLISTS, INITIAL_RADIOS, DEFAULT_USER, GENRE_CATEGORIES, VENUE_SECTORS, INITIAL_MOODS } from '../data/initialData';
 import { audioEngine } from '../utils/audioEngine';
+import { findMatchingPlaylistIds, getTracksForPlaylist } from '../utils/playlistMatcher';
+import { saveTrackMedia, getTrackMedia, deleteTrackMedia } from '../utils/audioStorage';
 
 interface MusicContextType {
   tracks: Track[];
   playlists: Playlist[];
   radios: RadioStation[];
+  genres: GenreCategory[];
+  sectors: VenueSector[];
+  moods: string[];
   user: UserProfile;
   setUser: React.Dispatch<React.SetStateAction<UserProfile>>;
   
@@ -57,10 +62,41 @@ interface MusicContextType {
   updateProfile: (profile: Partial<UserProfile>) => void;
   
   // Admin Operations
-  addTrack: (trackData: Omit<Track, 'id' | 'playsCount' | 'releaseDate'>) => Track;
+  addTrack: (trackData: Omit<Track, 'id' | 'playsCount' | 'releaseDate'> & { targetPlaylistIds?: string[] }) => Track;
   updateTrack: (id: string, updates: Partial<Track>) => void;
   deleteTrack: (id: string) => void;
   resetCatalogToDefault: () => void;
+
+  // Genres, Sectors, Radios, Moods Admin
+  setGenres: React.Dispatch<React.SetStateAction<GenreCategory[]>>;
+  addGenre: (genreData: Omit<GenreCategory, 'tracksCount'>) => void;
+  updateGenre: (name: string, updates: Partial<GenreCategory>) => void;
+  deleteGenre: (name: string) => void;
+  addTrackToGenre: (trackId: string, genreName: string) => void;
+  removeTrackFromGenre: (trackId: string) => void;
+
+  setSectors: React.Dispatch<React.SetStateAction<VenueSector[]>>;
+  addSector: (sectorData: Omit<VenueSector, 'tracksCount'>) => void;
+  updateSector: (name: string, updates: Partial<VenueSector>) => void;
+  deleteSector: (name: string) => void;
+  addTrackToSector: (trackId: string, sectorName: string) => void;
+  removeTrackFromSector: (trackId: string, sectorName: string) => void;
+
+  setRadios: React.Dispatch<React.SetStateAction<RadioStation[]>>;
+  addRadio: (radioData: Omit<RadioStation, 'id'>) => RadioStation;
+  updateRadio: (id: string, updates: Partial<RadioStation>) => void;
+  deleteRadio: (id: string) => void;
+  addTrackToRadio: (radioId: string, trackId: string) => void;
+  removeTrackFromRadio: (radioId: string, trackId: string) => void;
+
+  setMoods: React.Dispatch<React.SetStateAction<string[]>>;
+  addMood: (moodName: string) => void;
+  deleteMood: (moodName: string) => void;
+  addTrackToMood: (trackId: string, moodName: string) => void;
+  removeTrackFromMood: (trackId: string) => void;
+
+  updateTrackBpm: (trackId: string, bpm: number) => void;
+  saveAndApplyAllChanges: () => { success: boolean; message: string; shareCode: string; timestamp: string };
   
   // Cart & Licensing
   cart: CartItem[];
@@ -130,7 +166,45 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return INITIAL_PLAYLISTS;
   });
 
-  const [radios] = useState<RadioStation[]>(INITIAL_RADIOS);
+  const [radios, setRadios] = useState<RadioStation[]>(() => {
+    try {
+      const saved = localStorage.getItem('muzikbank_radios');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_RADIOS;
+  });
+
+  const [genres, setGenres] = useState<GenreCategory[]>(() => {
+    try {
+      const saved = localStorage.getItem('muzikbank_genres');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return GENRE_CATEGORIES;
+  });
+
+  const [sectors, setSectors] = useState<VenueSector[]>(() => {
+    try {
+      const saved = localStorage.getItem('muzikbank_sectors');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return VENUE_SECTORS;
+  });
+
+  const [moods, setMoods] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('muzikbank_moods');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_MOODS;
+  });
 
   const [user, setUser] = useState<UserProfile>(() => {
     try {
@@ -185,12 +259,47 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [isPricingModalOpen, setIsPricingModalOpen] = useState<boolean>(false);
   const [isCorporateModalOpen, setIsCorporateModalOpen] = useState<boolean>(false);
 
-  // Save changes to localStorage
+  // Restore any persistent media from IndexedDB on startup
+  useEffect(() => {
+    let isCancelled = false;
+    const restoreMedia = async () => {
+      try {
+        let hasChanges = false;
+        const restored = await Promise.all(
+          tracks.map(async (t) => {
+            if (t.audioUrl?.startsWith('idb:')) {
+              const media = await getTrackMedia(t.id);
+              if (media?.audio) {
+                hasChanges = true;
+                return { ...t, audioUrl: media.audio, coverUrl: media.image || t.coverUrl };
+              }
+            }
+            return t;
+          })
+        );
+        if (hasChanges && !isCancelled) {
+          setTracks(restored);
+        }
+      } catch (err) {
+        console.error('Failed to restore media from IndexedDB:', err);
+      }
+    };
+    restoreMedia();
+    return () => { isCancelled = true; };
+  }, []);
+
+  // Save changes to localStorage with quota protection
   useEffect(() => {
     try {
-      localStorage.setItem('muzikbank_tracks', JSON.stringify(tracks));
+      const sanitized = tracks.map(t => {
+        if (t.audioUrl && t.audioUrl.startsWith('data:audio') && t.audioUrl.length > 200000) {
+          return { ...t, audioUrl: `idb:${t.id}` };
+        }
+        return t;
+      });
+      localStorage.setItem('muzikbank_tracks', JSON.stringify(sanitized));
     } catch (e) {
-      console.error(e);
+      console.error('Failed to save tracks to localStorage:', e);
     }
   }, [tracks]);
 
@@ -209,6 +318,38 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       console.error(e);
     }
   }, [user]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('muzikbank_radios', JSON.stringify(radios));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [radios]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('muzikbank_genres', JSON.stringify(genres));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [genres]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('muzikbank_sectors', JSON.stringify(sectors));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [sectors]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('muzikbank_moods', JSON.stringify(moods));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [moods]);
 
   // Audio Playback logic
   const playTrack = useCallback((track: Track, queueContext?: Track[]) => {
@@ -378,7 +519,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   const playPlaylist = useCallback((playlist: Playlist) => {
-    const playlistTracks = tracks.filter(t => playlist.trackIds.includes(t.id));
+    const playlistTracks = getTracksForPlaylist(playlist, tracks);
     if (playlistTracks.length > 0) {
       playTrack(playlistTracks[0], playlistTracks);
     }
@@ -535,16 +676,55 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   // Admin Catalog actions
-  const addTrack = useCallback((trackData: Omit<Track, 'id' | 'playsCount' | 'releaseDate'>) => {
+  const addTrack = useCallback((trackData: Omit<Track, 'id' | 'playsCount' | 'releaseDate'> & { targetPlaylistIds?: string[] }) => {
+    const trackId = `trk-${Date.now()}`;
+    const { targetPlaylistIds, ...pureTrackData } = trackData;
+
     const newTrack: Track = {
-      ...trackData,
-      id: `trk-${Date.now()}`,
+      ...pureTrackData,
+      id: trackId,
       playsCount: Math.floor(Math.random() * 500) + 50,
       releaseDate: new Date().toISOString().split('T')[0]
     };
+
+    // Save to IndexedDB for persistent storage
+    if (newTrack.audioUrl?.startsWith('data:') || newTrack.audioUrl?.startsWith('blob:') || newTrack.coverUrl?.startsWith('data:')) {
+      saveTrackMedia(newTrack.id, newTrack.audioUrl, newTrack.coverUrl).catch(console.error);
+    }
+
+    // Determine matching playlist IDs (automatic from genre/sectors + target playlists)
+    const autoMatchingIds = findMatchingPlaylistIds(newTrack.genre, newTrack.sectors, playlists);
+    const combinedPlaylistIds = Array.from(new Set([...(targetPlaylistIds || []), ...autoMatchingIds]));
+
+    // Put at beginning of tracks
     setTracks(prev => [newTrack, ...prev]);
+
+    // Update playlists with this new track ID
+    if (combinedPlaylistIds.length > 0) {
+      setPlaylists(prev => prev.map(p => {
+        if (combinedPlaylistIds.includes(p.id)) {
+          if (!p.trackIds.includes(newTrack.id)) {
+            return { ...p, trackIds: [newTrack.id, ...p.trackIds] };
+          }
+        }
+        return p;
+      }));
+
+      setUser(prev => ({
+        ...prev,
+        customPlaylists: prev.customPlaylists.map(p => {
+          if (combinedPlaylistIds.includes(p.id)) {
+            if (!p.trackIds.includes(newTrack.id)) {
+              return { ...p, trackIds: [newTrack.id, ...p.trackIds] };
+            }
+          }
+          return p;
+        })
+      }));
+    }
+
     return newTrack;
-  }, []);
+  }, [playlists]);
 
   const updateTrack = useCallback((id: string, updates: Partial<Track>) => {
     setTracks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
@@ -554,6 +734,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [currentTrack]);
 
   const deleteTrack = useCallback((id: string) => {
+    deleteTrackMedia(id).catch(console.error);
     setTracks(prev => prev.filter(t => t.id !== id));
     setPlaylists(prev => prev.map(p => ({
       ...p,
@@ -569,11 +750,186 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const resetCatalogToDefault = useCallback(() => {
     setTracks(INITIAL_TRACKS);
     setPlaylists(INITIAL_PLAYLISTS);
+    setRadios(INITIAL_RADIOS);
+    setGenres(GENRE_CATEGORIES);
+    setSectors(VENUE_SECTORS);
+    setMoods(INITIAL_MOODS);
     localStorage.removeItem('muzikbank_tracks');
     localStorage.removeItem('muzikbank_playlists');
+    localStorage.removeItem('muzikbank_radios');
+    localStorage.removeItem('muzikbank_genres');
+    localStorage.removeItem('muzikbank_sectors');
+    localStorage.removeItem('muzikbank_moods');
     localStorage.removeItem('muzibu_tracks');
     localStorage.removeItem('muzibu_playlists');
   }, []);
+
+  // Genres Admin Actions
+  const addGenre = useCallback((genreData: Omit<GenreCategory, 'tracksCount'>) => {
+    const newGenre: GenreCategory = {
+      ...genreData,
+      tracksCount: 0
+    };
+    setGenres(prev => [...prev, newGenre]);
+  }, []);
+
+  const updateGenre = useCallback((name: string, updates: Partial<GenreCategory>) => {
+    setGenres(prev => prev.map(g => g.name === name ? { ...g, ...updates } : g));
+  }, []);
+
+  const deleteGenre = useCallback((name: string) => {
+    setGenres(prev => prev.filter(g => g.name !== name));
+  }, []);
+
+  const addTrackToGenre = useCallback((trackId: string, genreName: string) => {
+    setTracks(prev => prev.map(t => t.id === trackId ? { ...t, genre: genreName } : t));
+  }, []);
+
+  const removeTrackFromGenre = useCallback((trackId: string) => {
+    setTracks(prev => prev.map(t => t.id === trackId ? { ...t, genre: 'Chill' } : t));
+  }, []);
+
+  // Sectors Admin Actions
+  const addSector = useCallback((sectorData: Omit<VenueSector, 'tracksCount'>) => {
+    const newSector: VenueSector = {
+      ...sectorData,
+      tracksCount: 0
+    };
+    setSectors(prev => [...prev, newSector]);
+  }, []);
+
+  const updateSector = useCallback((name: string, updates: Partial<VenueSector>) => {
+    setSectors(prev => prev.map(s => s.name === name ? { ...s, ...updates } : s));
+  }, []);
+
+  const deleteSector = useCallback((name: string) => {
+    setSectors(prev => prev.filter(s => s.name !== name));
+  }, []);
+
+  const addTrackToSector = useCallback((trackId: string, sectorName: string) => {
+    setTracks(prev => prev.map(t => {
+      if (t.id === trackId && !t.sectors.includes(sectorName)) {
+        return { ...t, sectors: [...t.sectors, sectorName] };
+      }
+      return t;
+    }));
+  }, []);
+
+  const removeTrackFromSector = useCallback((trackId: string, sectorName: string) => {
+    setTracks(prev => prev.map(t => {
+      if (t.id === trackId) {
+        return { ...t, sectors: t.sectors.filter(s => s !== sectorName) };
+      }
+      return t;
+    }));
+  }, []);
+
+  // Radios Admin Actions
+  const addRadio = useCallback((radioData: Omit<RadioStation, 'id'>) => {
+    const newRadio: RadioStation = {
+      ...radioData,
+      id: `rad-${Date.now()}`
+    };
+    setRadios(prev => [...prev, newRadio]);
+    return newRadio;
+  }, []);
+
+  const updateRadio = useCallback((id: string, updates: Partial<RadioStation>) => {
+    setRadios(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+  }, []);
+
+  const deleteRadio = useCallback((id: string) => {
+    setRadios(prev => prev.filter(r => r.id !== id));
+  }, []);
+
+  const addTrackToRadio = useCallback((radioId: string, trackId: string) => {
+    setRadios(prev => prev.map(r => {
+      if (r.id === radioId) {
+        const currentIds = r.trackIds || [];
+        if (!currentIds.includes(trackId)) {
+          return { ...r, trackIds: [...currentIds, trackId] };
+        }
+      }
+      return r;
+    }));
+  }, []);
+
+  const removeTrackFromRadio = useCallback((radioId: string, trackId: string) => {
+    setRadios(prev => prev.map(r => {
+      if (r.id === radioId) {
+        return { ...r, trackIds: (r.trackIds || []).filter(id => id !== trackId) };
+      }
+      return r;
+    }));
+  }, []);
+
+  // Moods Admin Actions
+  const addMood = useCallback((moodName: string) => {
+    const trimmed = moodName.trim();
+    if (!trimmed) return;
+    setMoods(prev => {
+      if (prev.includes(trimmed)) return prev;
+      return [...prev, trimmed];
+    });
+  }, []);
+
+  const deleteMood = useCallback((moodName: string) => {
+    setMoods(prev => prev.filter(m => m !== moodName));
+  }, []);
+
+  const addTrackToMood = useCallback((trackId: string, moodName: string) => {
+    setTracks(prev => prev.map(t => t.id === trackId ? { ...t, mood: moodName } : t));
+  }, []);
+
+  const removeTrackFromMood = useCallback((trackId: string) => {
+    setTracks(prev => prev.map(t => t.id === trackId ? { ...t, mood: 'Sakin & Rahatlatıcı' } : t));
+  }, []);
+
+  // BPM Admin Actions
+  const updateTrackBpm = useCallback((trackId: string, bpm: number) => {
+    setTracks(prev => prev.map(t => t.id === trackId ? { ...t, bpm: Number(bpm) } : t));
+  }, []);
+
+  // Save & Apply All Changes across application
+  const saveAndApplyAllChanges = useCallback(() => {
+    try {
+      const sanitizedTracks = tracks.map(t => {
+        if (t.audioUrl && t.audioUrl.startsWith('data:audio') && t.audioUrl.length > 200000) {
+          return { ...t, audioUrl: `idb:${t.id}` };
+        }
+        return t;
+      });
+      localStorage.setItem('muzikbank_tracks', JSON.stringify(sanitizedTracks));
+      localStorage.setItem('muzikbank_genres', JSON.stringify(genres));
+      localStorage.setItem('muzikbank_sectors', JSON.stringify(sectors));
+      localStorage.setItem('muzikbank_radios', JSON.stringify(radios));
+      localStorage.setItem('muzikbank_moods', JSON.stringify(moods));
+      localStorage.setItem('muzikbank_playlists', JSON.stringify(playlists));
+    } catch (e) {
+      console.error('Failed to save to localStorage', e);
+    }
+
+    const sharePackage = {
+      app: 'müzikbank Telifsiz Müzik Platformu',
+      timestamp: new Date().toISOString(),
+      stats: {
+        totalTracks: tracks.length,
+        totalGenres: genres.length,
+        totalSectors: sectors.length,
+        totalRadios: radios.length,
+        totalMoods: moods.length
+      }
+    };
+
+    const shareCode = btoa(unescape(encodeURIComponent(JSON.stringify(sharePackage))));
+
+    return {
+      success: true,
+      message: 'Tüm değişiklikler başarıyla kaydedildi ve uygulama güncellendi!',
+      shareCode,
+      timestamp: new Date().toLocaleTimeString('tr-TR')
+    };
+  }, [tracks, genres, sectors, radios, moods, playlists]);
 
   // Cart & License actions
   const addToCart = useCallback((track: Track, licenseType: 'standard' | 'commercial_venue' | 'broadcast' = 'commercial_venue', venueName: string = 'Crystal Cafe') => {
@@ -637,6 +993,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         tracks,
         playlists,
         radios,
+        genres,
+        sectors,
+        moods,
         user,
         setUser,
         currentTrack,
@@ -679,6 +1038,31 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         updateTrack,
         deleteTrack,
         resetCatalogToDefault,
+        setGenres,
+        addGenre,
+        updateGenre,
+        deleteGenre,
+        addTrackToGenre,
+        removeTrackFromGenre,
+        setSectors,
+        addSector,
+        updateSector,
+        deleteSector,
+        addTrackToSector,
+        removeTrackFromSector,
+        setRadios,
+        addRadio,
+        updateRadio,
+        deleteRadio,
+        addTrackToRadio,
+        removeTrackFromRadio,
+        setMoods,
+        addMood,
+        deleteMood,
+        addTrackToMood,
+        removeTrackFromMood,
+        updateTrackBpm,
+        saveAndApplyAllChanges,
         cart,
         addToCart,
         removeFromCart,

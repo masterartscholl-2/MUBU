@@ -12,23 +12,11 @@ import {
 } from 'lucide-react';
 import { useMusic } from '../context/MusicContext';
 
-const GENRES = [
-  'Tümü', 'Ambient', 'Bossa Nova', 'Christmas', 'Blues', 'Chill', 
-  'Classical', 'House', 'Lo-Fi', 'Jazz', 'Afro House', 'Acoustic', 'Deep House'
-];
-
-const MOODS = [
-  'Tümü', 'Sakin & Rahatlatıcı', 'Enerjik & Canlı', 'Odaklanma & Çalışma', 
-  'Lüks & Şık', 'Vintage & Nostaljik', 'Neşeli & Pozitif', 'Huzurlu Doğa'
-];
-
-const SECTORS = [
-  'Tümü', 'Kafe & Kahve Dükkanı', 'Restoran & Fine Dining', 'Butik & Moda Mağazası', 
-  'Otel & Lounge', 'Spa & Güzellik Merkezi', 'Spor Salonu & Fitness', 'Ofis & Co-working'
-];
-
 export const FilterBar: React.FC = () => {
   const {
+    genres,
+    sectors,
+    moods,
     selectedGenreFilter,
     setSelectedGenreFilter,
     selectedMoodFilter,
@@ -39,6 +27,10 @@ export const FilterBar: React.FC = () => {
     setBpmRange,
     resetFilters
   } = useMusic();
+
+  const genreList = ['Tümü', ...genres.map(g => g.name)];
+  const moodList = ['Tümü', ...moods];
+  const sectorList = ['Tümü', ...sectors.map(s => s.name)];
 
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
@@ -87,7 +79,7 @@ export const FilterBar: React.FC = () => {
 
       {/* Horizontal Genre Scroll Pills */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
-        {GENRES.map((genre) => {
+        {genreList.map((genre) => {
           const isSelected = genre === 'Tümü' 
             ? !selectedGenreFilter 
             : selectedGenreFilter === genre;
@@ -122,7 +114,7 @@ export const FilterBar: React.FC = () => {
               onChange={(e) => setSelectedMoodFilter(e.target.value === 'Tümü' ? null : e.target.value)}
               className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-xl px-3 py-2 outline-none focus:border-purple-500"
             >
-              {MOODS.map(m => (
+              {moodList.map(m => (
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
@@ -139,7 +131,7 @@ export const FilterBar: React.FC = () => {
               onChange={(e) => setSelectedSectorFilter(e.target.value === 'Tümü' ? null : e.target.value)}
               className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-xl px-3 py-2 outline-none focus:border-purple-500"
             >
-              {SECTORS.map(s => (
+              {sectorList.map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>

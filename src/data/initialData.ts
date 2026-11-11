@@ -1,4 +1,15 @@
-import { Track, Playlist, RadioStation, UserProfile } from '../types';
+import { Track, Playlist, RadioStation, UserProfile, GenreCategory, VenueSector } from '../types';
+
+export const INITIAL_MOODS: string[] = [
+  'Sakin & Rahatlatıcı',
+  'Enerjik & Canlı',
+  'Odaklanma & Çalışma',
+  'Lüks & Şık',
+  'Vintage & Nostaljik',
+  'Neşeli & Pozitif',
+  'Huzurlu Doğa',
+  'Romantik'
+];
 
 export const INITIAL_TRACKS: Track[] = [
   {
@@ -363,14 +374,6 @@ export const QUICK_CATEGORIES = [
   { name: 'Chill', count: '210 Parça', coverUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400&auto=format&fit=crop', desc: 'Modern kafe ve lounge havası' },
   { name: 'Classical', count: '118 Parça', coverUrl: 'https://images.unsplash.com/photo-1520523839898-507127053e1a?q=80&w=400&auto=format&fit=crop', desc: 'Piyano & yaylı orkestra zarafeti' },
 ];
-
-export interface GenreCategory {
-  name: string;
-  badgeTitle: string;
-  tracksCount: number;
-  coverUrl: string;
-  desc: string;
-}
 
 export const GENRE_CATEGORIES: GenreCategory[] = [
   {

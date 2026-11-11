@@ -28,12 +28,15 @@ import { FilterBar } from './FilterBar';
 import { VenueManagement } from './VenueManagement';
 import { VENUE_SECTORS, GENRE_CATEGORIES } from '../data/initialData';
 import { Track, Playlist } from '../types';
+import { isTrackInSector, isTrackInGenre, getTracksForSector, getTracksForGenre, getTracksForPlaylist } from '../utils/playlistMatcher';
 
 export const MainContent: React.FC = () => {
   const { 
     tracks, 
     playlists, 
     radios,
+    genres,
+    sectors,
     playRadio,
     currentTrack, 
     isPlaying, 
@@ -146,9 +149,9 @@ export const MainContent: React.FC = () => {
         t.sectors.some(s => s.toLowerCase().includes(q));
       if (!match) return false;
     }
-    if (selectedGenreFilter && t.genre !== selectedGenreFilter) return false;
+    if (selectedGenreFilter && !isTrackInGenre(t, selectedGenreFilter)) return false;
     if (selectedMoodFilter && t.mood !== selectedMoodFilter) return false;
-    if (selectedSectorFilter && !t.sectors.includes(selectedSectorFilter)) return false;
+    if (selectedSectorFilter && !isTrackInSector(t, selectedSectorFilter)) return false;
     if (t.bpm && (t.bpm < bpmRange[0] || t.bpm > bpmRange[1])) return false;
     return true;
   });
@@ -160,7 +163,7 @@ export const MainContent: React.FC = () => {
   if (activeTab === 'playlist-detail' && selectedPlaylistId) {
     const pl = playlists.find(p => p.id === selectedPlaylistId);
     if (pl) {
-      const plTracks = tracks.filter(t => pl.trackIds.includes(t.id));
+      const plTracks = getTracksForPlaylist(pl, tracks);
       const isFav = isFavoritePlaylist(pl.id);
       return (
         <>
@@ -497,8 +500,8 @@ export const MainContent: React.FC = () => {
   if (activeTab === 'sectors') {
     // Detail view when a sector is selected
     if (selectedSectorDetail) {
-      const sectorData = VENUE_SECTORS.find(s => s.name.toLowerCase() === selectedSectorDetail.toLowerCase());
-      const sectorTracks = tracks.filter(t => t.sectors.some(s => s.toLowerCase().includes(selectedSectorDetail.toLowerCase().split(' ')[0])));
+      const sectorData = sectors.find(s => s.name.toLowerCase() === selectedSectorDetail.toLowerCase());
+      const sectorTracks = getTracksForSector(tracks, selectedSectorDetail);
       const displayTracks = sectorTracks.length > 0 ? sectorTracks : tracks.slice(0, 8);
 
       return (
@@ -676,8 +679,8 @@ export const MainContent: React.FC = () => {
 
         {/* Grid of Sector Cards matching image_3722839a.png */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
-          {VENUE_SECTORS.map((sec) => {
-            const sectorTracks = tracks.filter(t => t.sectors.some(s => s.toLowerCase().includes(sec.name.toLowerCase().split(' ')[0])));
+          {sectors.map((sec) => {
+            const sectorTracks = getTracksForSector(tracks, sec.name);
             const playList = sectorTracks.length > 0 ? sectorTracks : tracks;
             return (
               <div
@@ -725,7 +728,7 @@ export const MainContent: React.FC = () => {
                 </div>
 
                 <div className="mt-3 pt-2 border-t border-zinc-900 flex items-center justify-between text-[11px] text-zinc-500 font-mono">
-                  <span>{sec.tracksCount} Parça</span>
+                  <span>{sectorTracks.length} Parça</span>
                   <span className="text-purple-400 group-hover:translate-x-0.5 transition-transform font-sans font-semibold">Keşfet →</span>
                 </div>
               </div>
@@ -743,8 +746,8 @@ export const MainContent: React.FC = () => {
   if (activeTab === 'genres') {
     // Detail view when a genre is selected
     if (selectedGenreDetail) {
-      const genreData = GENRE_CATEGORIES.find(g => g.name.toLowerCase() === selectedGenreDetail.toLowerCase());
-      const genreTracks = tracks.filter(t => t.genre.toLowerCase() === selectedGenreDetail.toLowerCase());
+      const genreData = genres.find(g => g.name.toLowerCase() === selectedGenreDetail.toLowerCase());
+      const genreTracks = getTracksForGenre(tracks, selectedGenreDetail);
       const displayTracks = genreTracks.length > 0 ? genreTracks : tracks.slice(0, 8);
 
       return (
@@ -922,8 +925,8 @@ export const MainContent: React.FC = () => {
 
         {/* Grid of Genre Cards matching image_7e002529.png */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
-          {GENRE_CATEGORIES.map((g) => {
-            const matchingTracks = tracks.filter(t => t.genre.toLowerCase() === g.name.toLowerCase());
+          {genres.map((g) => {
+            const matchingTracks = getTracksForGenre(tracks, g.name);
             return (
               <div
                 key={g.name}
@@ -971,7 +974,7 @@ export const MainContent: React.FC = () => {
                 </div>
 
                 <div className="mt-2 pt-2 border-t border-zinc-900 flex items-center justify-between text-[11px] text-zinc-500 font-mono">
-                  <span>{g.tracksCount} Parça</span>
+                  <span>{matchingTracks.length} Parça</span>
                   <span className="text-purple-400 group-hover:translate-x-0.5 transition-transform font-sans font-semibold">Keşfet →</span>
                 </div>
               </div>
@@ -1310,7 +1313,7 @@ export const MainContent: React.FC = () => {
 
         {/* Venue horizontal cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {VENUE_SECTORS.map((sec) => (
+          {sectors.map((sec) => (
             <div
               key={sec.name}
               onClick={() => {
@@ -1331,7 +1334,7 @@ export const MainContent: React.FC = () => {
                 {sec.name}
               </h4>
               <span className="text-[10px] text-zinc-500">
-                {sec.tracksCount} Telifsiz Parça
+                {getTracksForSector(tracks, sec.name).length} Telifsiz Parça
               </span>
             </div>
           ))}
