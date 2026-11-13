@@ -1182,31 +1182,40 @@ export const MainContent: React.FC = () => {
   return (
     <div className="p-6 md:p-8 space-y-6 select-none">
       
-      {/* Search Bar - Positioned right above FilterBar as indicated in user screenshot */}
-      <div className="relative w-full">
-        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-          <Search className="w-4 h-4 text-purple-400" />
-        </div>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Şarkı, sanatçı, tür (Ambient, Bossa, House...), mekan ara..."
-          className="w-full pl-11 pr-24 py-3 bg-zinc-950/90 hover:bg-zinc-900/90 focus:bg-zinc-900 text-sm text-zinc-100 placeholder-zinc-500 rounded-2xl border border-zinc-800/90 hover:border-zinc-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all shadow-lg shadow-black/50"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            className="absolute inset-y-0 right-0 pr-4 flex items-center gap-1 text-xs text-zinc-400 hover:text-white font-medium transition-colors"
-          >
-            <X className="w-3.5 h-3.5" />
-            <span>Temizle</span>
-          </button>
-        )}
-      </div>
+      {/* Top Hero Container with Purple to Black Gradient matching user reference */}
+      <div className="relative overflow-hidden p-6 sm:p-7 rounded-3xl bg-gradient-to-b from-purple-700 via-purple-950/85 to-black border-t border-x border-purple-500/30 border-b border-zinc-900/50 shadow-2xl shadow-purple-950/60 space-y-4">
+        {/* Subtle luminous ambient glow and top specular highlight */}
+        <div className="absolute -top-16 left-12 w-80 h-32 bg-purple-400/25 blur-3xl pointer-events-none rounded-full" />
+        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-purple-300/60 to-transparent pointer-events-none" />
 
-      {/* Advanced Filter Bar Component */}
-      <FilterBar />
+        {/* Search Bar */}
+        <div className="relative w-full z-10">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <Search className="w-4 h-4 text-purple-300" />
+          </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Şarkı, sanatçı, tür (Ambient, Bossa, House...), mekan ara..."
+            className="w-full pl-11 pr-24 py-3 bg-black/45 backdrop-blur-md hover:bg-black/60 focus:bg-black/75 text-sm text-zinc-100 placeholder-purple-200/50 rounded-2xl border border-white/10 hover:border-purple-400/40 focus:border-purple-400 focus:ring-1 focus:ring-purple-400 outline-none transition-all shadow-inner shadow-black/50"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute inset-y-0 right-0 pr-4 flex items-center gap-1 text-xs text-zinc-300 hover:text-white font-medium transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Temizle</span>
+            </button>
+          )}
+        </div>
+
+        {/* Advanced Filter Bar Component */}
+        <div className="relative z-10">
+          <FilterBar />
+        </div>
+      </div>
 
       {/* 2. ÖNE ÇIKAN LİSTELER (Featured Playlists matching screenshot: Cappadocia House, Afro House, Arkada Çalsın, Chill House) */}
       <div>
@@ -1294,7 +1303,7 @@ export const MainContent: React.FC = () => {
       <div>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
+            <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
               Mekan Atmosferi
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
@@ -1345,9 +1354,9 @@ export const MainContent: React.FC = () => {
       <div>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
+            <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
               Telifsiz Parça Kataloğu
-              <span className="text-xs font-mono font-normal bg-zinc-900 text-zinc-400 px-2.5 py-0.5 rounded-full border border-zinc-800">
+              <span className="text-xs font-normal bg-zinc-900 text-zinc-400 px-2.5 py-0.5 rounded-full border border-zinc-800">
                 {filteredTracks.length} Parça
               </span>
             </h2>
