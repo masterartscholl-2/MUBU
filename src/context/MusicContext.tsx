@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { Track, Playlist, RadioStation, UserProfile, LicenseRecord, CartItem, VenueLocation, GenreCategory, VenueSector } from '../types';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { Track, Playlist, RadioStation, UserProfile, LicenseRecord, CartItem, VenueLocation, GenreCategory, VenueSector, ScheduledPlaylist } from '../types';
 import { INITIAL_TRACKS, INITIAL_PLAYLISTS, INITIAL_RADIOS, DEFAULT_USER, GENRE_CATEGORIES, VENUE_SECTORS, INITIAL_MOODS } from '../data/initialData';
 import { audioEngine } from '../utils/audioEngine';
 import { findMatchingPlaylistIds, getTracksForPlaylist } from '../utils/playlistMatcher';
 import { saveTrackMedia, getTrackMedia, deleteTrackMedia } from '../utils/audioStorage';
+import { resolveScheduleConflicts, ScheduleConflictNotice } from '../utils/scheduleConflict';
 
 interface MusicContextType {
   tracks: Track[];
@@ -140,6 +141,20 @@ interface MusicContextType {
   setIsPricingModalOpen: (open: boolean) => void;
   isCorporateModalOpen: boolean;
   setIsCorporateModalOpen: (open: boolean) => void;
+
+  // Playlist Scheduler (Ayarlar)
+  scheduledPlaylists: ScheduledPlaylist[];
+  addScheduledPlaylist: (item: Omit<ScheduledPlaylist, 'id'>) => ScheduledPlaylist;
+  updateScheduledPlaylist: (id: string, updates: Partial<ScheduledPlaylist>) => void;
+  deleteScheduledPlaylist: (id: string) => void;
+  activeAutoPlayNotice: { scheduleId: string; playlistTitle: string; timeLabel: string } | null;
+  dismissAutoPlayNotice: () => void;
+  activeScheduleDrag: { kind: 'new-playlist' | 'move-schedule'; playlistId?: string; scheduleId?: string; label: string } | null;
+  setActiveScheduleDrag: React.Dispatch<React.SetStateAction<{ kind: 'new-playlist' | 'move-schedule'; playlistId?: string; scheduleId?: string; label: string } | null>>;
+  quickSchedulePlaylistId: string | null;
+  setQuickSchedulePlaylistId: React.Dispatch<React.SetStateAction<string | null>>;
+  scheduleConflictNotice: ScheduleConflictNotice | null;
+  dismissScheduleConflictNotice: () => void;
 }
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
@@ -259,6 +274,33 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [isPricingModalOpen, setIsPricingModalOpen] = useState<boolean>(false);
   const [isCorporateModalOpen, setIsCorporateModalOpen] = useState<boolean>(false);
 
+  // Scheduled Playlists state
+  const [scheduledPlaylists, setScheduledPlaylists] = useState<ScheduledPlaylist[]>(() => {
+    try {
+      const saved = localStorage.getItem('muzikbank_schedule');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
+  });
+
+  const [activeAutoPlayNotice, setActiveAutoPlayNotice] = useState<{
+    scheduleId: string;
+    playlistTitle: string;
+    timeLabel: string;
+  } | null>(null);
+
+  const [activeScheduleDrag, setActiveScheduleDrag] = useState<{
+    kind: 'new-playlist' | 'move-schedule';
+    playlistId?: string;
+    scheduleId?: string;
+    label: string;
+  } | null>(null);
+
+  const [quickSchedulePlaylistId, setQuickSchedulePlaylistId] = useState<string | null>(null);
+  const [scheduleConflictNotice, setScheduleConflictNotice] = useState<ScheduleConflictNotice | null>(null);
+
   // Restore any persistent media from IndexedDB on startup
   useEffect(() => {
     let isCancelled = false;
@@ -350,6 +392,14 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       console.error(e);
     }
   }, [moods]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('muzikbank_schedule', JSON.stringify(scheduledPlaylists));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [scheduledPlaylists]);
 
   // Audio Playback logic
   const playTrack = useCallback((track: Track, queueContext?: Track[]) => {
@@ -593,6 +643,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const deletePlaylist = useCallback((id: string) => {
     setPlaylists(prev => prev.filter(p => p.id !== id));
+    setScheduledPlaylists(prev => prev.filter(s => s.playlistId !== id));
     setUser(prev => ({
       ...prev,
       customPlaylists: prev.customPlaylists.filter(p => p.id !== id),
@@ -987,6 +1038,118 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setMaxPriceFilter(null);
   }, []);
 
+  // Scheduled Playlists CRUD with automatic conflict detection & resolution
+  const addScheduledPlaylist = useCallback((item: Omit<ScheduledPlaylist, 'id'>) => {
+    const newItem: ScheduledPlaylist = {
+      ...item,
+      id: `sch-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    };
+    const { nextSchedules, notice } = resolveScheduleConflicts(scheduledPlaylists, newItem, playlists);
+    setScheduledPlaylists(nextSchedules);
+    if (notice) {
+      setScheduleConflictNotice(notice);
+    }
+    return nextSchedules.find(s => s.id === newItem.id) || newItem;
+  }, [scheduledPlaylists, playlists]);
+
+  const updateScheduledPlaylist = useCallback((id: string, updates: Partial<ScheduledPlaylist>) => {
+    const existing = scheduledPlaylists.find(item => item.id === id);
+    if (!existing) return;
+
+    const timingChanged =
+      updates.date !== undefined ||
+      updates.startHour !== undefined ||
+      updates.startMinute !== undefined ||
+      updates.durationHours !== undefined ||
+      updates.repeatWeekly !== undefined ||
+      updates.dayOfWeek !== undefined;
+
+    const updatedItem: ScheduledPlaylist = {
+      ...existing,
+      ...updates,
+      lastTriggeredDate: timingChanged ? undefined : (updates.lastTriggeredDate ?? existing.lastTriggeredDate)
+    };
+
+    const { nextSchedules, notice } = resolveScheduleConflicts(scheduledPlaylists, updatedItem, playlists);
+    setScheduledPlaylists(nextSchedules);
+    if (notice) {
+      setScheduleConflictNotice(notice);
+    }
+  }, [scheduledPlaylists, playlists]);
+
+  const deleteScheduledPlaylist = useCallback((id: string) => {
+    setScheduledPlaylists(prev => prev.filter(item => item.id !== id));
+  }, []);
+
+  const dismissAutoPlayNotice = useCallback(() => {
+    setActiveAutoPlayNotice(null);
+  }, []);
+
+  const dismissScheduleConflictNotice = useCallback(() => {
+    setScheduleConflictNotice(null);
+  }, []);
+
+  // Auto-dismiss notice after 8 seconds
+  useEffect(() => {
+    if (!activeAutoPlayNotice) return;
+    const timer = window.setTimeout(() => {
+      setActiveAutoPlayNotice(null);
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [activeAutoPlayNotice]);
+
+  // Automatic date/time playback scheduler
+  const schedulerStateRef = useRef({ scheduledPlaylists, playlists, playPlaylist });
+  useEffect(() => {
+    schedulerStateRef.current = { scheduledPlaylists, playlists, playPlaylist };
+  }, [scheduledPlaylists, playlists, playPlaylist]);
+
+  useEffect(() => {
+    const checkSchedule = () => {
+      const { scheduledPlaylists: currentSchedules, playlists: currentPlaylists, playPlaylist: triggerPlay } = schedulerStateRef.current;
+      if (!currentSchedules.length) return;
+
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const dayOfWeek = now.getDay();
+      const nowMins = now.getHours() * 60 + now.getMinutes();
+
+      const candidates = currentSchedules.filter(item => {
+        const matchesDate = item.date === todayStr || (Boolean(item.repeatWeekly) && item.dayOfWeek === dayOfWeek);
+        if (!matchesDate) return false;
+        const slotStart = item.startHour * 60 + item.startMinute;
+        const slotEnd = slotStart + Math.max(1, Math.round(item.durationHours * 60));
+        return nowMins >= slotStart && nowMins < slotEnd && item.lastTriggeredDate !== todayStr;
+      });
+
+      if (candidates.length === 0) return;
+
+      // Pick the most recently started candidate
+      candidates.sort((a, b) => (b.startHour * 60 + b.startMinute) - (a.startHour * 60 + a.startMinute));
+      const target = candidates[0];
+      const pl = currentPlaylists.find(p => p.id === target.playlistId);
+
+      // Mark as triggered for today regardless so we don't spin
+      setScheduledPlaylists(prev => prev.map(item =>
+        item.id === target.id ? { ...item, lastTriggeredDate: todayStr } : item
+      ));
+
+      if (pl) {
+        triggerPlay(pl);
+        const timeLabel = `${String(target.startHour).padStart(2, '0')}:${String(target.startMinute).padStart(2, '0')}`;
+        setActiveAutoPlayNotice({
+          scheduleId: target.id,
+          playlistTitle: pl.title,
+          timeLabel
+        });
+      }
+    };
+
+    checkSchedule();
+    const interval = window.setInterval(checkSchedule, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   return (
     <MusicContext.Provider
       value={{
@@ -1099,6 +1262,18 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setIsPricingModalOpen,
         isCorporateModalOpen,
         setIsCorporateModalOpen,
+        scheduledPlaylists,
+        addScheduledPlaylist,
+        updateScheduledPlaylist,
+        deleteScheduledPlaylist,
+        activeAutoPlayNotice,
+        dismissAutoPlayNotice,
+        activeScheduleDrag,
+        setActiveScheduleDrag,
+        quickSchedulePlaylistId,
+        setQuickSchedulePlaylistId,
+        scheduleConflictNotice,
+        dismissScheduleConflictNotice,
       }}
     >
       {children}

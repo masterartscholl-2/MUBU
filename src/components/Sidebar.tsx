@@ -11,7 +11,8 @@ import {
   PlusCircle, 
   Sparkles,
   SlidersHorizontal,
-  UserCheck
+  UserCheck,
+  Settings
 } from 'lucide-react';
 import { useMusic } from '../context/MusicContext';
 
@@ -25,7 +26,8 @@ export const Sidebar: React.FC = () => {
     setIsPricingModalOpen,
     setIsCorporateModalOpen,
     setSelectedPlaylistId,
-    setSelectedSectorName
+    setSelectedSectorName,
+    scheduledPlaylists
   } = useMusic();
 
   const handleNav = (tab: string) => {
@@ -124,6 +126,25 @@ export const Sidebar: React.FC = () => {
               <span className="text-[10px] font-bold tracking-wider text-purple-400 bg-purple-950/80 border border-purple-800/50 px-1.5 py-0.5 rounded">
                 CANLI
               </span>
+            </button>
+
+            <button
+              onClick={() => handleNav('settings')}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                activeTab === 'settings'
+                  ? 'bg-gradient-to-r from-purple-900/40 to-indigo-950/40 text-purple-300 border border-purple-500/30'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Settings className="w-4 h-4 text-white" />
+                <span>Ayarlar</span>
+              </div>
+              {scheduledPlaylists.length > 0 && (
+                <span className="text-xs bg-zinc-900 text-zinc-400 px-2 py-0.5 rounded-full font-mono">
+                  {scheduledPlaylists.length}
+                </span>
+              )}
             </button>
           </nav>
         </div>

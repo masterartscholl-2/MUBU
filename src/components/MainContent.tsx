@@ -26,6 +26,7 @@ import {
 import { useMusic } from '../context/MusicContext';
 import { FilterBar } from './FilterBar';
 import { VenueManagement } from './VenueManagement';
+import { ScheduleSettings } from './ScheduleSettings';
 import { VENUE_SECTORS, GENRE_CATEGORIES } from '../data/initialData';
 import { Track, Playlist } from '../types';
 import { isTrackInSector, isTrackInGenre, getTracksForSector, getTracksForGenre, getTracksForPlaylist } from '../utils/playlistMatcher';
@@ -309,6 +310,11 @@ export const MainContent: React.FC = () => {
   // VENUE MANAGEMENT TAB
   if (activeTab === 'venue-management') {
     return <VenueManagement />;
+  }
+
+  // SETTINGS / AUTO-PLAY SCHEDULE TAB
+  if (activeTab === 'settings') {
+    return <ScheduleSettings />;
   }
 
   // FAVORITES TAB

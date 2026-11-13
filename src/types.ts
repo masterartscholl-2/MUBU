@@ -155,3 +155,16 @@ export interface UserProfile {
     validUntil: string;
   };
 }
+
+export interface ScheduledPlaylist {
+  id: string;
+  playlistId: string;
+  date: string; // 'YYYY-MM-DD'
+  startHour: number; // 0-23
+  startMinute: number; // 0-59
+  durationHours: number; // e.g., 1, 2, 3
+  color: string;
+  repeatWeekly?: boolean;
+  dayOfWeek?: number; // 0 (Sunday) - 6 (Saturday)
+  lastTriggeredDate?: string; // 'YYYY-MM-DD'
+}
