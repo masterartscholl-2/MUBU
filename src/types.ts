@@ -168,3 +168,30 @@ export interface ScheduledPlaylist {
   dayOfWeek?: number; // 0 (Sunday) - 6 (Saturday)
   lastTriggeredDate?: string; // 'YYYY-MM-DD'
 }
+
+export interface ManagedVenue {
+  id: string;
+  venueName: string;
+  companyName: string;
+  authorizedPerson: string;
+  email: string;
+  phone: string;
+  taxNumber: string;
+  taxOffice: string;
+  sector: string;
+  city: string;
+  district: string;
+  address: string;
+  sqMeters: number;
+  packageName: string;
+  packagePrice: number;
+  billingCycle: 'Aylık' | 'Yıllık';
+  purchasedAt: string; // YYYY-MM-DD
+  expiresAt: string; // YYYY-MM-DD
+  autoRenew: boolean;
+  paymentStatus: 'Ödendi' | 'Beklemede' | 'İptal';
+  licenseNo: string;
+  assignedPlaylistId?: string;
+  notes?: string;
+}
+

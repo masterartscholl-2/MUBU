@@ -212,7 +212,7 @@ export const PersistentPlayer: React.FC = () => {
           {/* Title & Artist & License badge */}
           <div className="min-w-0 pr-2">
             <h4 className="text-xs md:text-sm font-bold text-white truncate hover:text-purple-300 transition-colors cursor-pointer">
-              {currentTrack ? currentTrack.title : 'müzikbank Çalma Listesinden Bir Parça Seç'}
+              {currentTrack ? currentTrack.title : 'Staff Çalma Listesinden Bir Parça Seç'}
             </h4>
             <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 truncate">
               <span>{currentTrack ? currentTrack.artist : 'Telifsiz Müzik Platformu'}</span>

@@ -1,11 +1,95 @@
-import React from 'react';
-import { X, Check, Sparkles, Building, Store, Zap, ShieldCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Check, Sparkles, ShieldCheck } from 'lucide-react';
 import { useMusic } from '../context/MusicContext';
 
+function formatYMD(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export const PricingModal: React.FC = () => {
-  const { isPricingModalOpen, setIsPricingModalOpen, setUser, user } = useMusic();
+  const {
+    isPricingModalOpen,
+    setIsPricingModalOpen,
+    setUser,
+    user,
+    managedVenues,
+    addManagedVenue,
+    updateManagedVenue
+  } = useMusic();
+
+  const [purchasedBanner, setPurchasedBanner] = useState<string | null>(null);
 
   if (!isPricingModalOpen) return null;
+
+  const activatePackage = (
+    pkgTitle: string,
+    subPlan: 'Kafe/Mekan Aylık' | 'Yıllık Kurumsal' | 'Zincir Mağaza',
+    priceNum: number,
+    cycle: 'Aylık' | 'Yıllık'
+  ) => {
+    const today = new Date();
+    const expiry = new Date(today);
+    if (cycle === 'Yıllık') {
+      expiry.setFullYear(expiry.getFullYear() + 1);
+    } else {
+      expiry.setMonth(expiry.getMonth() + 1);
+    }
+    const purchasedAt = formatYMD(today);
+    const expiresAt = formatYMD(expiry);
+
+    setUser(prev => ({
+      ...prev,
+      subscription: {
+        plan: subPlan,
+        status: 'active',
+        validUntil: expiresAt
+      }
+    }));
+
+    const existing = managedVenues.find(
+      v => v.companyName === (user.companyName || user.name) || v.email === user.email
+    );
+    if (existing) {
+      updateManagedVenue(existing.id, {
+        packageName: pkgTitle,
+        packagePrice: priceNum,
+        billingCycle: cycle,
+        purchasedAt,
+        expiresAt,
+        paymentStatus: 'Ödendi',
+        autoRenew: true
+      });
+    } else {
+      addManagedVenue({
+        venueName: user.locations?.[0]?.name || user.companyName || user.name,
+        companyName: user.companyName || user.name,
+        authorizedPerson: user.name,
+        email: user.email,
+        phone: user.phone || '+90 (212) 234 56 78',
+        taxNumber: user.taxNumber || 'TR-349821901',
+        taxOffice: user.taxOffice || 'Mecidiyeköy V.D.',
+        sector: user.locations?.[0]?.sector || 'Kafe & Kahve Dükkanı',
+        city: user.locations?.[0]?.city || 'İstanbul',
+        district: user.locations?.[0]?.district || 'Şişli',
+        address: user.locations?.[0]?.address || '',
+        sqMeters: user.locations?.[0]?.sqMeters || 120,
+        packageName: pkgTitle,
+        packagePrice: priceNum,
+        billingCycle: cycle,
+        purchasedAt,
+        expiresAt,
+        autoRenew: true,
+        paymentStatus: 'Ödendi',
+        assignedPlaylistId: user.locations?.[0]?.assignedPlaylistId || 'pl-1'
+      });
+    }
+
+    setPurchasedBanner(`${pkgTitle} aboneliğiniz aktif edildi (${purchasedAt} → ${expiresAt}).`);
+    window.setTimeout(() => {
+      setPurchasedBanner(null);
+      setIsPricingModalOpen(false);
+    }, 1800);
+  };
 
   const plans = [
     {
@@ -14,7 +98,7 @@ export const PricingModal: React.FC = () => {
       period: 'aylık',
       desc: 'Tek şubeli kafe, bistro, butik veya güzellik merkezleri için sınırsız ticari müzik yayını.',
       features: [
-        'Tüm müzikbank kataloğuna ve radyolarına sınırsız erişim',
+        'Tüm Staff kataloğuna ve radyolarına sınırsız erişim',
         'MESAM / MSG / MÜ-YAP Yasal Muafiyet Belgesi',
         '7/24 Kesintisiz tematik mekan radyoları',
         'Özelleştirilebilir mekan çalma listeleri',
@@ -23,18 +107,7 @@ export const PricingModal: React.FC = () => {
       ],
       popular: true,
       buttonText: 'Paketi Seç & Abone Ol',
-      action: () => {
-        setUser(prev => ({
-          ...prev,
-          subscription: {
-            plan: 'Kafe/Mekan Aylık',
-            status: 'active',
-            validUntil: '2026-12-31'
-          }
-        }));
-        alert('Tebrikler! Kafe & Butik Mekan aboneliğiniz aktif edildi. Yasal muafiyet sertifikanız profilinize tanımlandı.');
-        setIsPricingModalOpen(false);
-      }
+      action: () => activatePackage('Kafe & Butik Mekan', 'Kafe/Mekan Aylık', 690, 'Aylık')
     },
     {
       name: 'Restoran & Lounge Bar',
@@ -50,18 +123,7 @@ export const PricingModal: React.FC = () => {
       ],
       popular: false,
       buttonText: 'Paketi Seç & Abone Ol',
-      action: () => {
-        setUser(prev => ({
-          ...prev,
-          subscription: {
-            plan: 'Kafe/Mekan Aylık',
-            status: 'active',
-            validUntil: '2026-12-31'
-          }
-        }));
-        alert('Tebrikler! Restoran & Lounge Bar mekan paketiniz aktif edildi.');
-        setIsPricingModalOpen(false);
-      }
+      action: () => activatePackage('Restoran & Lounge Bar', 'Kafe/Mekan Aylık', 1190, 'Aylık')
     },
     {
       name: 'Zincir & Kurumsal Şube',
@@ -78,18 +140,7 @@ export const PricingModal: React.FC = () => {
       ],
       popular: false,
       buttonText: 'Kurumsal Abonelik Başlat',
-      action: () => {
-        setUser(prev => ({
-          ...prev,
-          subscription: {
-            plan: 'Zincir Mağaza',
-            status: 'active',
-            validUntil: '2026-12-31'
-          }
-        }));
-        alert('Tebrikler! Kurumsal zincir paketiniz aktif edildi.');
-        setIsPricingModalOpen(false);
-      }
+      action: () => activatePackage('Zincir & Kurumsal Şube', 'Zincir Mağaza', 1850, 'Aylık')
     }
   ];
 
@@ -102,7 +153,7 @@ export const PricingModal: React.FC = () => {
           <div>
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-purple-400" />
-              müzikbank Mekan Lisanslama Paketleri
+              Staff Mekan Lisanslama Paketleri
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
               İşletmenizde yasal güvenceyle telifsiz müzik çalın, ceza risklerini ortadan kaldırın.
@@ -119,6 +170,13 @@ export const PricingModal: React.FC = () => {
 
         {/* Pricing Cards */}
         <div className="p-6 overflow-y-auto custom-scrollbar">
+          {purchasedBanner && (
+            <div className="mb-5 p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500/50 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fadeIn">
+              <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span>{purchasedBanner}</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {plans.map((p, idx) => (
               <div

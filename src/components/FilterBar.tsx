@@ -25,9 +25,11 @@ export const FilterBar: React.FC = () => {
     setSelectedSectorFilter,
     bpmRange,
     setBpmRange,
-    resetFilters
+    resetFilters,
+    theme
   } = useMusic();
 
+  const isLight = theme === 'light';
   const genreList = ['Tümü', ...genres.map(g => g.name)];
   const moodList = ['Tümü', ...moods];
   const sectorList = ['Tümü', ...sectors.map(s => s.name)];
@@ -43,11 +45,17 @@ export const FilterBar: React.FC = () => {
   );
 
   return (
-    <div className="bg-black/35 backdrop-blur-md border border-white/10 rounded-2xl p-4 select-none">
+    <div
+      className={`rounded-2xl p-4 select-none ${
+        isLight
+          ? 'bg-white border border-zinc-200/90 shadow-sm'
+          : 'bg-black/35 backdrop-blur-md border border-white/10'
+      }`}
+    >
       {/* Top Quick Filters: Genres Bar */}
       <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2 text-xs font-bold text-zinc-300">
-          <Filter className="w-4 h-4 text-purple-400" />
+        <div className={`flex items-center gap-2 text-xs font-bold ${isLight ? 'text-zinc-800' : 'text-zinc-300'}`}>
+          <Filter className={`w-4 h-4 ${isLight ? 'text-purple-600' : 'text-purple-400'}`} />
           <span>Filtrele:</span>
         </div>
 
@@ -55,7 +63,11 @@ export const FilterBar: React.FC = () => {
           {hasActiveFilters && (
             <button
               onClick={resetFilters}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 transition-colors"
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-colors ${
+                isLight
+                  ? 'text-rose-600 hover:text-rose-700 hover:bg-rose-50'
+                  : 'text-rose-400 hover:text-rose-300 hover:bg-rose-950/40'
+              }`}
             >
               <RotateCcw className="w-3 h-3" />
               <span>Sıfırla</span>
@@ -67,6 +79,8 @@ export const FilterBar: React.FC = () => {
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
               isAdvancedOpen
                 ? 'bg-purple-600 text-white shadow-md shadow-purple-900/30'
+                : isLight
+                ? 'bg-zinc-100 text-zinc-700 hover:text-zinc-950 hover:bg-zinc-200 border border-zinc-200'
                 : 'bg-black/40 text-zinc-300 hover:text-white hover:bg-white/10 border border-white/10'
             }`}
           >
@@ -91,6 +105,8 @@ export const FilterBar: React.FC = () => {
               className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
                 isSelected
                   ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-950/40'
+                  : isLight
+                  ? 'bg-zinc-100 text-zinc-700 hover:text-zinc-950 hover:bg-zinc-200 border border-zinc-200'
                   : 'bg-black/40 text-zinc-300 hover:text-white hover:bg-white/10 border border-white/10'
               }`}
             >
@@ -102,49 +118,57 @@ export const FilterBar: React.FC = () => {
 
       {/* Collapsible Advanced Filters: Mood, Sector, BPM */}
       {isAdvancedOpen && (
-        <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs animate-fadeIn">
+        <div className={`mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-3 gap-4 text-xs animate-fadeIn ${isLight ? 'border-zinc-200' : 'border-white/10'}`}>
           {/* Mood / Mod Filter */}
           <div>
-            <div className="flex items-center gap-1.5 font-bold text-zinc-300 mb-2">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <div className={`flex items-center gap-1.5 font-bold mb-2 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
+              <Sparkles className={`w-3.5 h-3.5 ${isLight ? 'text-purple-600' : 'text-purple-400'}`} />
               <span>Mod / Atmosfer</span>
             </div>
             <select
               value={selectedMoodFilter || 'Tümü'}
               onChange={(e) => setSelectedMoodFilter(e.target.value === 'Tümü' ? null : e.target.value)}
-              className="w-full bg-black/50 border border-white/10 text-zinc-200 rounded-xl px-3 py-2 outline-none focus:border-purple-400"
+              className={`w-full rounded-xl px-3 py-2 outline-none focus:border-purple-500 ${
+                isLight
+                  ? 'bg-zinc-50 border border-zinc-300 text-zinc-900'
+                  : 'bg-black/50 border border-white/10 text-zinc-200 focus:border-purple-400'
+              }`}
             >
               {moodList.map(m => (
-                <option key={m} value={m} className="bg-zinc-900 text-white">{m}</option>
+                <option key={m} value={m} className={isLight ? 'bg-white text-zinc-900' : 'bg-zinc-900 text-white'}>{m}</option>
               ))}
             </select>
           </div>
 
           {/* Sector / Mekan Filter */}
           <div>
-            <div className="flex items-center gap-1.5 font-bold text-zinc-300 mb-2">
-              <Store className="w-3.5 h-3.5 text-indigo-400" />
+            <div className={`flex items-center gap-1.5 font-bold mb-2 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
+              <Store className={`w-3.5 h-3.5 ${isLight ? 'text-indigo-600' : 'text-indigo-400'}`} />
               <span>Mekan / Sektör Türü</span>
             </div>
             <select
               value={selectedSectorFilter || 'Tümü'}
               onChange={(e) => setSelectedSectorFilter(e.target.value === 'Tümü' ? null : e.target.value)}
-              className="w-full bg-black/50 border border-white/10 text-zinc-200 rounded-xl px-3 py-2 outline-none focus:border-purple-400"
+              className={`w-full rounded-xl px-3 py-2 outline-none focus:border-purple-500 ${
+                isLight
+                  ? 'bg-zinc-50 border border-zinc-300 text-zinc-900'
+                  : 'bg-black/50 border border-white/10 text-zinc-200 focus:border-purple-400'
+              }`}
             >
               {sectorList.map(s => (
-                <option key={s} value={s} className="bg-zinc-900 text-white">{s}</option>
+                <option key={s} value={s} className={isLight ? 'bg-white text-zinc-900' : 'bg-zinc-900 text-white'}>{s}</option>
               ))}
             </select>
           </div>
 
           {/* BPM Slider */}
           <div>
-            <div className="flex items-center justify-between font-bold text-zinc-400 mb-2">
+            <div className={`flex items-center justify-between font-bold mb-2 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
               <div className="flex items-center gap-1.5">
-                <Gauge className="w-3.5 h-3.5 text-rose-400" />
+                <Gauge className={`w-3.5 h-3.5 ${isLight ? 'text-rose-600' : 'text-rose-400'}`} />
                 <span>Tempo / BPM Aralığı</span>
               </div>
-              <span className="font-mono text-purple-300">
+              <span className={`font-mono ${isLight ? 'text-purple-700' : 'text-purple-300'}`}>
                 {bpmRange[0]} - {bpmRange[1]} BPM
               </span>
             </div>
@@ -156,7 +180,7 @@ export const FilterBar: React.FC = () => {
                 step="5"
                 value={bpmRange[1]}
                 onChange={(e) => setBpmRange([bpmRange[0], parseInt(e.target.value)])}
-                className="w-full h-1.5 bg-zinc-800 accent-purple-500 rounded-lg cursor-pointer"
+                className={`w-full h-1.5 accent-purple-500 rounded-lg cursor-pointer ${isLight ? 'bg-zinc-200' : 'bg-zinc-800'}`}
               />
             </div>
           </div>

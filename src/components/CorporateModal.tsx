@@ -94,7 +94,7 @@ export const CorporateModal: React.FC = () => {
           <div className="space-y-4">
             <h4 className="text-sm font-bold text-white flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              müzikbank ile İşletmeniz Neden Yasal Olarak Güvendedir?
+              Staff ile İşletmeniz Neden Yasal Olarak Güvendedir?
             </h4>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -104,7 +104,7 @@ export const CorporateModal: React.FC = () => {
                   Doğrudan Eser Sahibi Lisansı
                 </h5>
                 <p className="text-zinc-400 leading-relaxed text-[11px]">
-                  müzikbank platformundaki tüm şarkıların umuma iletim, mekan çalma ve çoğaltma hakları yapımcı ve bestecilerden doğrudan sözleşmeyle devralınmıştır.
+                  Staff platformundaki tüm şarkıların umuma iletim, mekan çalma ve çoğaltma hakları yapımcı ve bestecilerden doğrudan sözleşmeyle devralınmıştır.
                 </p>
               </div>
 

@@ -1,0 +1,259 @@
+{
+  "entities": {
+    "UploadedTrack": {
+      "title": "UploadedTrack",
+      "description": "Persistent music track metadata uploaded or updated from the Admin Panel, with large media stored in subcollection chunks.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique track identifier matching pattern",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Track display title",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "artist": {
+          "type": "string",
+          "description": "Artist or curator name",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duration in seconds"
+        },
+        "audioUrl": {
+          "type": "string",
+          "description": "Inline URL or 'chunked' sentinel when MP3 binary is stored in chunks subcollection",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "coverUrl": {
+          "type": "string",
+          "description": "Inline cover URL/Data URL or 'chunked' sentinel when cover image is stored in chunks subcollection",
+          "minLength": 1,
+          "maxLength": 250000
+        },
+        "audioChunkCount": {
+          "type": "number",
+          "description": "Number of audio data chunks in subcollection (0 if inline/synth)"
+        },
+        "coverChunkCount": {
+          "type": "number",
+          "description": "Number of cover image data chunks in subcollection (0 if inline)"
+        },
+        "genre": {
+          "type": "string",
+          "description": "Music genre name",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "mood": {
+          "type": "string",
+          "description": "Mood or atmosphere label",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "sectors": {
+          "type": "array",
+          "description": "Bounded list of venue sectors"
+        },
+        "bpm": {
+          "type": "number",
+          "description": "Tempo in BPM"
+        },
+        "price": {
+          "type": "number",
+          "description": "Track license price in TL"
+        },
+        "isCommercialCleared": {
+          "type": "boolean",
+          "description": "Whether track is cleared for commercial playback"
+        },
+        "playsCount": {
+          "type": "number",
+          "description": "Track play counter"
+        },
+        "releaseDate": {
+          "type": "string",
+          "description": "Release date ISO YYYY-MM-DD",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "tags": {
+          "type": "array",
+          "description": "Bounded list of searchable tags"
+        },
+        "synthPreset": {
+          "type": "string",
+          "enum": ["chill", "lofi", "ambient", "house", "jazz", "bossa"],
+          "description": "Fallback synthesizer preset"
+        },
+        "targetPlaylistIds": {
+          "type": "array",
+          "description": "Bounded list of playlist IDs assigned to this track"
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "UID of the admin who uploaded or updated the track",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when track was persisted"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when track was last updated"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "artist",
+        "duration",
+        "audioUrl",
+        "coverUrl",
+        "audioChunkCount",
+        "coverChunkCount",
+        "genre",
+        "mood",
+        "sectors",
+        "bpm",
+        "price",
+        "isCommercialCleared",
+        "playsCount",
+        "releaseDate",
+        "tags",
+        "synthPreset",
+        "targetPlaylistIds",
+        "ownerUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MediaChunk": {
+      "title": "MediaChunk",
+      "description": "Bounded chunk of base64 Data URL for uploaded MP3 audio or cover image under 1MB Firestore document limits.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["audio", "cover"],
+          "description": "Media payload type"
+        },
+        "index": {
+          "type": "number",
+          "description": "Zero-based chunk index"
+        },
+        "totalChunks": {
+          "type": "number",
+          "description": "Total number of chunks for this kind"
+        },
+        "data": {
+          "type": "string",
+          "description": "Chunk slice of Data URL string",
+          "minLength": 1,
+          "maxLength": 600000
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "UID of the admin owner",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when chunk was created"
+        }
+      },
+      "required": ["kind", "index", "totalChunks", "data", "ownerUid", "createdAt"]
+    },
+    "DeletedTrackTombstone": {
+      "title": "DeletedTrackTombstone",
+      "description": "Permanent deletion record for catalog tracks deleted manually in the Admin Panel.",
+      "type": "object",
+      "properties": {
+        "trackId": {
+          "type": "string",
+          "description": "ID of the permanently deleted track",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "isDeleted": {
+          "type": "boolean",
+          "description": "Fixed boolean marker confirming permanent deletion"
+        },
+        "deletedBy": {
+          "type": "string",
+          "description": "UID of the admin who deleted the track",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "deletedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when track was deleted"
+        }
+      },
+      "required": ["trackId", "isDeleted", "deletedBy", "deletedAt"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized administrator registry document.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"],
+          "description": "Fixed admin role"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp"
+        }
+      },
+      "required": ["uid", "role", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/uploadedTracks/{trackId}": {
+      "schema": { "$ref": "#/entities/UploadedTrack" },
+      "description": "Uploaded or admin-edited persistent track catalog metadata"
+    },
+    "/uploadedTracks/{trackId}/chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/MediaChunk" },
+      "description": "Chunked MP3 audio and large cover image payloads belonging to an uploaded track"
+    },
+    "/deletedTracks/{trackId}": {
+      "schema": { "$ref": "#/entities/DeletedTrackTombstone" },
+      "description": "Tombstones ensuring manually deleted tracks remain permanently deleted"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Admin role assignment documents"
+    }
+  }
+}

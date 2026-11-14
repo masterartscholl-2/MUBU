@@ -50,6 +50,17 @@ class AudioEngine {
     }
   }
 
+  public unlock() {
+    try {
+      this.initAudioContext();
+      if (!this.audio) {
+        this.audio = new Audio();
+      }
+    } catch {
+      // Ignore unlock failures outside gesture context
+    }
+  }
+
   public play(
     url: string,
     preset: string = 'chill',

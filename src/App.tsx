@@ -17,14 +17,34 @@ function AutoPlayToast() {
   const { activeAutoPlayNotice, dismissAutoPlayNotice } = useMusic();
   if (!activeAutoPlayNotice) return null;
 
+  const isEnded = activeAutoPlayNotice.status === 'ended';
+
   return (
-    <div className="fixed top-20 right-6 z-50 max-w-sm bg-zinc-950/95 backdrop-blur-xl border border-purple-500/50 rounded-2xl p-3.5 shadow-2xl shadow-purple-950/60 flex items-center gap-3 animate-fadeIn">
-      <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white flex items-center justify-center flex-shrink-0">
+    <div
+      className={`fixed top-20 right-6 z-50 max-w-sm bg-zinc-950/95 backdrop-blur-xl rounded-2xl p-3.5 shadow-2xl flex items-center gap-3 animate-fadeIn border ${
+        isEnded
+          ? 'border-emerald-500/50 shadow-emerald-950/50'
+          : 'border-purple-500/50 shadow-purple-950/60'
+      }`}
+    >
+      <div
+        className={`w-9 h-9 rounded-xl text-white flex items-center justify-center flex-shrink-0 ${
+          isEnded
+            ? 'bg-gradient-to-r from-emerald-600 to-teal-600'
+            : 'bg-gradient-to-r from-purple-600 to-indigo-600'
+        }`}
+      >
         <Calendar className="w-4 h-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-[11px] font-bold text-purple-300 uppercase tracking-wider">
-          Otomatik Yayın Başladı • {activeAutoPlayNotice.timeLabel}
+        <div
+          className={`text-[11px] font-bold uppercase tracking-wider ${
+            isEnded ? 'text-emerald-300' : 'text-purple-300'
+          }`}
+        >
+          {isEnded
+            ? `Otomatik Yayın Tamamlandı • ${activeAutoPlayNotice.timeLabel}`
+            : `Otomatik Yayın Başladı • ${activeAutoPlayNotice.timeLabel}`}
         </div>
         <div className="text-xs font-bold text-white truncate">
           {activeAutoPlayNotice.playlistTitle}

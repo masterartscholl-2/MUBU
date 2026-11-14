@@ -21,15 +21,13 @@ export const isTrackInSector = (track: Track, sectorName: string): boolean => {
 };
 
 /**
- * Flexible genre matcher.
+ * Exact normalized genre matcher so each track belongs strictly to its assigned genre.
  */
 export const isTrackInGenre = (track: Track, genreName: string): boolean => {
-  if (!track || !track.genre) return false;
-  const gNorm = genreName.toLowerCase().trim();
-  const trackGNorm = track.genre.toLowerCase().trim();
-  if (trackGNorm === gNorm) return true;
-  if (trackGNorm.includes(gNorm) || gNorm.includes(trackGNorm)) return true;
-  return false;
+  if (!track || !track.genre || !genreName) return false;
+  const gNorm = genreName.trim().toLowerCase();
+  const trackGNorm = track.genre.trim().toLowerCase();
+  return trackGNorm === gNorm;
 };
 
 /**

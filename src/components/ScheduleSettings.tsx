@@ -7,6 +7,7 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Repeat,
   Pencil,
   X,
@@ -52,7 +53,7 @@ function getMondayOfWeek(date: Date): Date {
 
 function formatTimeRange(startHour: number, startMinute: number, durationHours: number): string {
   const startTotal = startHour * 60 + startMinute;
-  const endTotal = (startTotal + Math.round(durationHours * 60)) % (24 * 60);
+  const endTotal = (startTotal + Math.max(1, Math.round(durationHours * 60))) % (24 * 60);
   const sh = String(Math.floor(startTotal / 60)).padStart(2, '0');
   const sm = String(startTotal % 60).padStart(2, '0');
   const eh = String(Math.floor(endTotal / 60)).padStart(2, '0');
@@ -62,6 +63,24 @@ function formatTimeRange(startHour: number, startMinute: number, durationHours: 
 
 function formatStartTime(startHour: number, startMinute: number): string {
   return `${String(startHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}`;
+}
+
+function computeEndTimeStr(startTimeStr: string, durationHours: number): string {
+  const [shStr, smStr] = startTimeStr.split(':');
+  const startMins = (Number(shStr) || 0) * 60 + (Number(smStr) || 0);
+  const durMins = Math.max(1, Math.round(durationHours * 60));
+  const endMins = (startMins + durMins) % (24 * 60);
+  return `${String(Math.floor(endMins / 60)).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
+}
+
+function computeDurationHoursFromTimes(startTimeStr: string, endTimeStr: string): number {
+  const [shStr, smStr] = startTimeStr.split(':');
+  const [ehStr, emStr] = endTimeStr.split(':');
+  const startMins = (Number(shStr) || 0) * 60 + (Number(smStr) || 0);
+  const endMins = (Number(ehStr) || 0) * 60 + (Number(emStr) || 0);
+  let diff = endMins - startMins;
+  if (diff <= 0) diff += 24 * 60;
+  return Number((Math.max(1, diff) / 60).toFixed(4));
 }
 
 interface DragPayload {
@@ -79,6 +98,7 @@ export const ScheduleSettings: React.FC = () => {
     updateScheduledPlaylist,
     deleteScheduledPlaylist,
     playPlaylist,
+    activeScheduledId,
     activeScheduleDrag,
     setActiveScheduleDrag,
     quickSchedulePlaylistId,
@@ -102,12 +122,34 @@ export const ScheduleSettings: React.FC = () => {
     playlistId: string;
     date: string;
     timeStr: string;
+    endTimeStr: string;
     durationHours: number;
     color: string;
     repeatWeekly: boolean;
   } | null>(null);
 
+  const [weekDropdownOpen, setWeekDropdownOpen] = useState(false);
+
   const gridScrollRef = useRef<HTMLDivElement>(null);
+  const weekDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close week dropdown when clicking outside or switching away from week view
+  useEffect(() => {
+    if (viewMode !== 'week') {
+      setWeekDropdownOpen(false);
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (!weekDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (weekDropdownRef.current && !weekDropdownRef.current.contains(e.target as Node)) {
+        setWeekDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [weekDropdownOpen]);
 
   // Update live clock every second for accurate red line & time display
   useEffect(() => {
@@ -129,11 +171,13 @@ export const ScheduleSettings: React.FC = () => {
     if (!quickSchedulePlaylistId) return;
     const h = now.getHours();
     const m = Math.min(59, now.getMinutes() + 1);
+    const startTimeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     setModalState({
       mode: 'create',
       playlistId: quickSchedulePlaylistId,
       date: formatLocalDate(now),
-      timeStr: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`,
+      timeStr: startTimeStr,
+      endTimeStr: computeEndTimeStr(startTimeStr, 2),
       durationHours: 2,
       color: BLOCK_COLORS[scheduledPlaylists.length % BLOCK_COLORS.length].hex,
       repeatWeekly: false
@@ -236,6 +280,45 @@ export const ScheduleSettings: React.FC = () => {
   }, [monthGridDays, scheduledPlaylists]);
 
   const isCurrentPeriodVisible = displayedColumns.some(d => d.dateStr === todayStr);
+
+  // Generate week-by-week options centered around the currently viewed week
+  const weekOptions = useMemo(() => {
+    const anchorMonday = getMondayOfWeek(selectedAnchorDate);
+    const currentWeekMondayStr = formatLocalDate(getMondayOfWeek(now));
+    const selectedWeekMondayStr = formatLocalDate(anchorMonday);
+
+    return Array.from({ length: 17 }, (_, i) => {
+      const offsetWeeks = i - 6;
+      const monday = new Date(anchorMonday);
+      monday.setDate(anchorMonday.getDate() + offsetWeeks * 7);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+
+      const mondayStr = formatLocalDate(monday);
+      let scheduleCount = 0;
+      for (let dIdx = 0; dIdx < 7; dIdx++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + dIdx);
+        const dStr = formatLocalDate(d);
+        const dow = d.getDay();
+        scheduledPlaylists.forEach(item => {
+          if (item.date === dStr || (Boolean(item.repeatWeekly) && item.dayOfWeek === dow)) {
+            scheduleCount += 1;
+          }
+        });
+      }
+
+      const label = `${monday.getDate()} ${TURKISH_MONTHS_SHORT[monday.getMonth()]} - ${sunday.getDate()} ${TURKISH_MONTHS_SHORT[sunday.getMonth()]} ${sunday.getFullYear()}`;
+      return {
+        monday,
+        mondayStr,
+        label,
+        isCurrentWeek: mondayStr === currentWeekMondayStr,
+        isSelected: mondayStr === selectedWeekMondayStr,
+        scheduleCount
+      };
+    });
+  }, [selectedAnchorDate, now, scheduledPlaylists]);
 
   const navigatePeriod = (direction: -1 | 1) => {
     setSelectedAnchorDate(prev => {
@@ -390,11 +473,13 @@ export const ScheduleSettings: React.FC = () => {
     const targetDate = dateStr || todayStr;
     const h = hour !== undefined ? hour : now.getHours();
     const m = minute !== undefined ? minute : Math.min(59, now.getMinutes() + 1);
+    const startTimeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     setModalState({
       mode: 'create',
       playlistId: fallbackPlId,
       date: targetDate,
-      timeStr: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`,
+      timeStr: startTimeStr,
+      endTimeStr: computeEndTimeStr(startTimeStr, 2),
       durationHours: 2,
       color: BLOCK_COLORS[scheduledPlaylists.length % BLOCK_COLORS.length].hex,
       repeatWeekly: false
@@ -402,12 +487,14 @@ export const ScheduleSettings: React.FC = () => {
   };
 
   const openEditModal = (item: ScheduledPlaylist) => {
+    const startTimeStr = `${String(item.startHour).padStart(2, '0')}:${String(item.startMinute).padStart(2, '0')}`;
     setModalState({
       mode: 'edit',
       scheduleId: item.id,
       playlistId: item.playlistId,
       date: item.date,
-      timeStr: `${String(item.startHour).padStart(2, '0')}:${String(item.startMinute).padStart(2, '0')}`,
+      timeStr: startTimeStr,
+      endTimeStr: computeEndTimeStr(startTimeStr, item.durationHours),
       durationHours: item.durationHours,
       color: item.color,
       repeatWeekly: Boolean(item.repeatWeekly)
@@ -474,7 +561,7 @@ export const ScheduleSettings: React.FC = () => {
             {user.companyName || 'Mekan Yayın Programı'}
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Playlistleri sürükleyip istediğiniz tarih ve saat dilimine bırakın — eklenen saatte otomatik çalmaya başlar.
+            Playlistleri sürükleyip istediğiniz tarih ve saat dilimine bırakın — ayarlanan saatte otomatik başlar ve biter.
           </p>
         </div>
 
@@ -554,9 +641,9 @@ export const ScheduleSettings: React.FC = () => {
 
       {/* MONTH VIEW (1 AY GÖRÜNÜMÜ) */}
       {viewMode === 'month' ? (
-        <div className="rounded-3xl bg-[#060608] border border-zinc-900 overflow-hidden shadow-2xl">
+        <div className="rounded-3xl bg-[#060608] border border-zinc-700/80 overflow-hidden shadow-2xl">
           {/* Month Banner Header */}
-          <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3.5 border-b border-zinc-900 bg-[#08080b]">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3.5 border-b border-zinc-700/80 bg-[#08080b]">
             <div className="flex items-center gap-3">
               <h2 className="text-base font-extrabold text-white tracking-tight">
                 {periodLabel}
@@ -571,7 +658,7 @@ export const ScheduleSettings: React.FC = () => {
           </div>
 
           {/* Weekday Headers */}
-          <div className="grid grid-cols-7 gap-px bg-zinc-900/70 border-b border-zinc-900">
+          <div className="grid grid-cols-7 gap-px bg-zinc-700/80 border-b border-zinc-700/80">
             {TURKISH_WEEKDAYS_MON_FIRST.map(dayTitle => (
               <div
                 key={dayTitle}
@@ -583,7 +670,7 @@ export const ScheduleSettings: React.FC = () => {
           </div>
 
           {/* 35/42 Day Cells */}
-          <div className="grid grid-cols-7 gap-px bg-zinc-900/60">
+          <div className="grid grid-cols-7 gap-px bg-zinc-700/75">
             {monthGridDays.map((cell) => {
               const isToday = cell.dateStr === todayStr;
               const isDragTarget = hoverMonthDate === cell.dateStr;
@@ -686,7 +773,7 @@ export const ScheduleSettings: React.FC = () => {
                             )}
                           </div>
 
-                          <div className="flex items-center gap-0.5 opacity-0 group-hover/chip:opacity-100 transition-opacity flex-shrink-0">
+                          <div className="flex items-center gap-0.5 flex-shrink-0">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -697,6 +784,17 @@ export const ScheduleSettings: React.FC = () => {
                               title="Şimdi Çal"
                             >
                               <Play className="w-2.5 h-2.5 fill-current" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditModal(item);
+                              }}
+                              className="p-0.5 rounded bg-black/15 hover:bg-zinc-950 text-zinc-950 hover:text-white transition-colors"
+                              title="Tarih, Saat ve Süreyi Düzenle"
+                            >
+                              <Pencil className="w-2.5 h-2.5" />
                             </button>
                             <button
                               type="button"
@@ -721,10 +819,94 @@ export const ScheduleSettings: React.FC = () => {
         </div>
       ) : (
         /* DAY OR WEEK TIMELINE VIEW (Image 2 Style) */
-        <div className="rounded-3xl bg-[#060608] border border-zinc-900 overflow-hidden shadow-2xl">
+        <div className="rounded-3xl bg-[#060608] border border-zinc-700/80 overflow-hidden shadow-2xl">
           {/* Active Period Banner */}
-          <div className="flex items-center justify-between px-5 py-2.5 border-b border-zinc-900/90 bg-[#08080b]">
-            <span className="text-xs font-bold text-zinc-200">{periodLabel}</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-2.5 border-b border-zinc-700/80 bg-[#08080b]">
+            {viewMode === 'week' ? (
+              <div className="relative flex items-center gap-1.5" ref={weekDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => navigatePeriod(-1)}
+                  className="p-1.5 rounded-lg bg-[#121218] border border-zinc-700/80 text-zinc-300 hover:text-white hover:border-purple-500/60 transition-colors"
+                  title="Önceki Hafta"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setWeekDropdownOpen(prev => !prev)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#121218] border border-zinc-700/80 hover:border-purple-500/60 text-xs font-bold text-white transition-colors"
+                  title="Hafta Seç"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                  <span>{periodLabel}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${weekDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigatePeriod(1)}
+                  className="p-1.5 rounded-lg bg-[#121218] border border-zinc-700/80 text-zinc-300 hover:text-white hover:border-purple-500/60 transition-colors"
+                  title="Sonraki Hafta"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+
+                {formatLocalDate(getMondayOfWeek(selectedAnchorDate)) !== formatLocalDate(getMondayOfWeek(now)) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAnchorDate(new Date());
+                      setWeekDropdownOpen(false);
+                    }}
+                    className="ml-1 px-2.5 py-1 rounded-lg bg-purple-950/60 border border-purple-500/40 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/40 transition-colors"
+                  >
+                    Bu Hafta
+                  </button>
+                )}
+
+                {weekDropdownOpen && (
+                  <div className="absolute left-0 top-full mt-2 w-72 max-h-72 overflow-y-auto custom-scrollbar rounded-2xl bg-[#111116] border border-zinc-700/90 shadow-2xl shadow-black/80 p-1.5 z-50">
+                    <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-800/80 mb-1 flex items-center justify-between">
+                      <span>Hafta Seçin</span>
+                      <span className="text-zinc-500 normal-case font-normal">Haftalık aralık</span>
+                    </div>
+                    {weekOptions.map((opt) => (
+                      <button
+                        key={opt.mondayStr}
+                        type="button"
+                        onClick={() => {
+                          setSelectedAnchorDate(new Date(opt.monday));
+                          setWeekDropdownOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-left text-xs transition-colors ${
+                          opt.isSelected
+                            ? 'bg-gradient-to-r from-purple-600/30 to-indigo-600/30 text-white border border-purple-500/50 font-bold'
+                            : 'text-zinc-300 hover:bg-zinc-800/70 hover:text-white border border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="truncate">{opt.label}</span>
+                          {opt.isCurrentWeek && (
+                            <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[9px] font-bold flex-shrink-0">
+                              Bu Hafta
+                            </span>
+                          )}
+                        </div>
+                        {opt.scheduleCount > 0 && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-purple-950/70 text-purple-300 flex-shrink-0">
+                            {opt.scheduleCount} yayın
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span className="text-xs font-bold text-zinc-200">{periodLabel}</span>
+            )}
             <span className="text-[11px] text-zinc-500">
               {viewMode === 'day' ? 'Günlük 24 Saat Detaylı Görünüm' : 'Haftalık Yayın Çizelgesi'}
             </span>
@@ -734,7 +916,7 @@ export const ScheduleSettings: React.FC = () => {
             <div className={viewMode === 'day' ? 'min-w-[420px]' : 'min-w-[800px]'}>
               {/* Day Column Headers */}
               <div
-                className={`grid gap-2 px-4 pt-3 pb-3 border-b border-zinc-900/90 bg-[#08080b] ${
+                className={`grid gap-2 px-4 pt-3 pb-3 border-b border-zinc-700/80 bg-[#08080b] ${
                   viewMode === 'day'
                     ? 'grid-cols-[64px_minmax(0,1fr)]'
                     : 'grid-cols-[64px_repeat(7,minmax(0,1fr))]'
@@ -801,7 +983,7 @@ export const ScheduleSettings: React.FC = () => {
                     {HOURS.map((hour) => (
                       <div
                         key={hour}
-                        className="text-right pr-3 text-[11px] font-medium text-zinc-500 font-mono"
+                        className="text-right pr-3 text-[11px] font-medium text-zinc-400 font-mono"
                         style={{ height: `${HOUR_HEIGHT}px` }}
                       >
                         <span className="-mt-2 inline-block">
@@ -826,8 +1008,8 @@ export const ScheduleSettings: React.FC = () => {
                         key={day.dateStr}
                         className={`relative rounded-2xl overflow-hidden border transition-colors ${
                           isToday
-                            ? 'bg-[#121218] border-purple-500/25'
-                            : 'bg-[#0e0e12] border-zinc-900/90'
+                            ? 'bg-[#121218] border-purple-500/60'
+                            : 'bg-[#0e0e12] border-zinc-700/75'
                         }`}
                         style={{ height: `${24 * HOUR_HEIGHT}px` }}
                       >
@@ -835,7 +1017,7 @@ export const ScheduleSettings: React.FC = () => {
                         {HOURS.map((hour) => (
                           <div
                             key={hour}
-                            className="border-b border-zinc-800/40 flex flex-col"
+                            className="border-b border-zinc-700/75 flex flex-col"
                             style={{ height: `${HOUR_HEIGHT}px` }}
                           >
                             {[0, 30].map((minute) => {
@@ -861,7 +1043,7 @@ export const ScheduleSettings: React.FC = () => {
                                   onDoubleClick={() => openCreateModal(day.dateStr, hour, minute)}
                                   title={`Çift tıkla veya sürükleyip bırak (${day.dayName} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')})`}
                                   className={`flex-1 relative transition-all ${
-                                    minute === 0 ? 'border-b border-zinc-800/20 border-dashed' : ''
+                                    minute === 0 ? 'border-b border-zinc-700/45 border-dashed' : ''
                                   } ${
                                     isHovered
                                       ? 'bg-purple-500/25 ring-2 ring-inset ring-purple-400 z-20'
@@ -884,11 +1066,12 @@ export const ScheduleSettings: React.FC = () => {
                           const pl = playlists.find(p => p.id === item.playlistId);
                           if (!pl) return null;
 
-                          const topPx = (item.startHour + item.startMinute / 60) * HOUR_HEIGHT + 3;
+                          const topPx = (item.startHour + item.startMinute / 60) * HOUR_HEIGHT + 2;
                           const maxDurationToEndOfDay = Math.max(0.5, 24 - (item.startHour + item.startMinute / 60));
                           const clampedDuration = Math.min(item.durationHours, maxDurationToEndOfDay);
-                          const heightPx = Math.max(54, clampedDuration * HOUR_HEIGHT - 6);
-                          const isCompact = heightPx < 86;
+                          const heightPx = Math.max(56, clampedDuration * HOUR_HEIGHT - 4);
+                          const isCompact = heightPx < 92;
+                          const isLiveActive = activeScheduledId === item.id && isToday;
                           const hasTriggeredToday = item.lastTriggeredDate === todayStr && isToday;
 
                           return (
@@ -902,87 +1085,174 @@ export const ScheduleSettings: React.FC = () => {
                                 height: `${heightPx}px`,
                                 backgroundColor: item.color
                               }}
-                              className="group absolute left-1 right-1 z-20 rounded-2xl p-2 shadow-lg shadow-black/50 border border-black/10 cursor-grab active:cursor-grabbing flex flex-col justify-between overflow-hidden transition-transform hover:scale-[1.01] hover:z-30"
+                              className={`group absolute left-1 right-1 z-20 rounded-2xl ${
+                                isCompact ? 'p-1.5' : 'p-2'
+                              } shadow-lg shadow-black/50 border border-black/10 cursor-grab active:cursor-grabbing flex flex-col justify-between overflow-hidden transition-transform hover:scale-[1.01] hover:z-30`}
                             >
-                              {/* Top Row: Title & Time on Left, Cover Image on Right */}
-                              <div className="flex items-start justify-between gap-1.5 min-w-0">
-                                <div className="min-w-0 flex-1">
-                                  <h4 className="text-xs font-extrabold text-zinc-950 leading-tight line-clamp-2">
-                                    {pl.title}
-                                  </h4>
-                                  <div className="flex flex-wrap items-center gap-1 mt-0.5">
-                                    <span className="text-[10px] font-bold text-zinc-900/85 font-mono whitespace-nowrap">
+                              {isCompact ? (
+                                <>
+                                  {/* Compact Card Top Row: Single-line Title + Status + Mini Cover */}
+                                  <div className="flex items-center justify-between gap-1 min-w-0">
+                                    <div className="flex items-center gap-1 min-w-0 flex-1">
+                                      {isLiveActive && (
+                                        <span
+                                          className="w-2 h-2 rounded-full bg-zinc-950 ring-2 ring-emerald-400 animate-pulse flex-shrink-0"
+                                          title="Yayında"
+                                        />
+                                      )}
+                                      <h4 className="text-[11px] font-extrabold text-zinc-950 leading-tight truncate">
+                                        {pl.title}
+                                      </h4>
+                                      {item.repeatWeekly && (
+                                        <span title="Haftalık" className="inline-flex flex-shrink-0">
+                                          <Repeat className="w-2.5 h-2.5 text-zinc-950/75" />
+                                        </span>
+                                      )}
+                                      {!isLiveActive && hasTriggeredToday && (
+                                        <span title="Çalındı" className="inline-flex flex-shrink-0">
+                                          <Check className="w-2.5 h-2.5 text-zinc-950" />
+                                        </span>
+                                      )}
+                                    </div>
+                                    <img
+                                      src={pl.coverUrl}
+                                      alt={pl.title}
+                                      draggable={false}
+                                      className="w-5 h-5 rounded-md object-cover flex-shrink-0 shadow-sm border border-black/15"
+                                    />
+                                  </div>
+
+                                  {/* Compact Card Bottom Row: Time + Play, Edit, Delete always visible */}
+                                  <div className="flex items-center justify-between gap-1 flex-shrink-0 pt-0.5">
+                                    <span className="text-[9.5px] font-bold text-zinc-900/90 font-mono truncate">
                                       {formatTimeRange(item.startHour, item.startMinute, item.durationHours)}
                                     </span>
-                                    {item.repeatWeekly && (
-                                      <span
-                                        className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-black/15 text-zinc-950"
-                                        title="Her hafta bu gün ve saatte tekrarlanır"
+
+                                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          playPlaylist(pl);
+                                        }}
+                                        className="p-1 rounded-md bg-black/15 hover:bg-zinc-950 text-zinc-950 hover:text-white transition-colors"
+                                        title="Şimdi Çal"
                                       >
-                                        <Repeat className="w-2.5 h-2.5" />
-                                        Haftalık
-                                      </span>
-                                    )}
-                                    {hasTriggeredToday && (
-                                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-zinc-950/85 text-emerald-300">
-                                        <Check className="w-2.5 h-2.5" />
-                                        Çalındı
-                                      </span>
-                                    )}
+                                        <Play className="w-2.5 h-2.5 fill-current" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openEditModal(item);
+                                        }}
+                                        className="p-1 rounded-md bg-black/15 hover:bg-zinc-950 text-zinc-950 hover:text-white transition-colors"
+                                        title="Tarih, Saat ve Süreyi Düzenle"
+                                      >
+                                        <Pencil className="w-2.5 h-2.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          deleteScheduledPlaylist(item.id);
+                                        }}
+                                        className="p-1 rounded-md bg-black/15 hover:bg-rose-600 text-zinc-950 hover:text-white transition-colors"
+                                        title="Programdan Sil"
+                                      >
+                                        <Trash2 className="w-2.5 h-2.5" />
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
+                                </>
+                              ) : (
+                                <>
+                                  {/* Standard Card Top Row: Title & Time on Left, Cover Image on Right */}
+                                  <div className="flex items-start justify-between gap-1.5 min-w-0 min-h-0 flex-1 overflow-hidden">
+                                    <div className="min-w-0 flex-1">
+                                      <h4 className="text-xs font-extrabold text-zinc-950 leading-tight line-clamp-2">
+                                        {pl.title}
+                                      </h4>
+                                      <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                                        <span className="text-[10px] font-bold text-zinc-900/85 font-mono whitespace-nowrap">
+                                          {formatTimeRange(item.startHour, item.startMinute, item.durationHours)}
+                                        </span>
+                                        {item.repeatWeekly && (
+                                          <span
+                                            className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-black/15 text-zinc-950"
+                                            title="Her hafta bu gün ve saatte tekrarlanır"
+                                          >
+                                            <Repeat className="w-2.5 h-2.5" />
+                                            Haftalık
+                                          </span>
+                                        )}
+                                        {isLiveActive ? (
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-zinc-950 text-emerald-300">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                            Yayında
+                                          </span>
+                                        ) : hasTriggeredToday && (
+                                          <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-zinc-950/85 text-emerald-300">
+                                            <Check className="w-2.5 h-2.5" />
+                                            Çalındı
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
 
-                                <img
-                                  src={pl.coverUrl}
-                                  alt={pl.title}
-                                  draggable={false}
-                                  className={`${
-                                    isCompact || viewMode === 'week' ? 'w-8 h-8' : 'w-11 h-11'
-                                  } rounded-xl object-cover flex-shrink-0 shadow-sm border border-black/15`}
-                                />
-                              </div>
+                                    <img
+                                      src={pl.coverUrl}
+                                      alt={pl.title}
+                                      draggable={false}
+                                      className={`${
+                                        viewMode === 'week' ? 'w-8 h-8' : 'w-11 h-11'
+                                      } rounded-xl object-cover flex-shrink-0 shadow-sm border border-black/15`}
+                                    />
+                                  </div>
 
-                              {/* Bottom Row: Play, Edit, Delete Actions */}
-                              <div className="flex items-center justify-between gap-1 pt-1">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    playPlaylist(pl);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-1.5 py-1 rounded-lg bg-black/15 hover:bg-zinc-950 text-zinc-950 hover:text-white text-[10px] font-bold transition-colors opacity-90 group-hover:opacity-100"
-                                  title="Şimdi Çal"
-                                >
-                                  <Play className="w-2.5 h-2.5 fill-current" />
-                                  {!isCompact && viewMode === 'day' && <span>Çal</span>}
-                                </button>
+                                  {/* Bottom Row: Play, Edit, Delete Actions */}
+                                  <div className="flex items-center justify-between gap-1 pt-1 flex-shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        playPlaylist(pl);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-1.5 py-1 rounded-lg bg-black/15 hover:bg-zinc-950 text-zinc-950 hover:text-white text-[10px] font-bold transition-colors opacity-90 group-hover:opacity-100"
+                                      title="Şimdi Çal"
+                                    >
+                                      <Play className="w-2.5 h-2.5 fill-current" />
+                                      {viewMode === 'day' && <span>Çal</span>}
+                                    </button>
 
-                                <div className="flex items-center gap-1 flex-shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openEditModal(item);
-                                    }}
-                                    className="p-1 rounded-lg bg-black/15 hover:bg-zinc-950 text-zinc-950 hover:text-white transition-colors"
-                                    title="Tarih, Saat ve Süreyi Düzenle"
-                                  >
-                                    <Pencil className="w-3 h-3" />
-                                  </button>
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openEditModal(item);
+                                        }}
+                                        className="p-1 rounded-lg bg-black/15 hover:bg-zinc-950 text-zinc-950 hover:text-white transition-colors"
+                                        title="Tarih, Saat ve Süreyi Düzenle"
+                                      >
+                                        <Pencil className="w-3 h-3" />
+                                      </button>
 
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deleteScheduledPlaylist(item.id);
-                                    }}
-                                    className="p-1 rounded-lg bg-black/15 hover:bg-rose-600 text-zinc-950 hover:text-white transition-colors"
-                                    title="Programdan Sil"
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              </div>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          deleteScheduledPlaylist(item.id);
+                                        }}
+                                        className="p-1 rounded-lg bg-black/15 hover:bg-rose-600 text-zinc-950 hover:text-white transition-colors"
+                                        title="Programdan Sil"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           );
                         })}
@@ -1125,20 +1395,21 @@ export const ScheduleSettings: React.FC = () => {
                 </select>
               </div>
 
-              {/* Date & Exact Time */}
+              {/* Date, Start Time & End Time */}
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                  Tarih
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={modalState.date}
+                  onChange={(e) => setModalState({ ...modalState, date: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-medium text-white outline-none focus:border-purple-500 [color-scheme:dark]"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
-                    Tarih
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={modalState.date}
-                    onChange={(e) => setModalState({ ...modalState, date: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-medium text-white outline-none focus:border-purple-500 [color-scheme:dark]"
-                  />
-                </div>
                 <div>
                   <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
                     Başlangıç Saati
@@ -1147,7 +1418,34 @@ export const ScheduleSettings: React.FC = () => {
                     type="time"
                     required
                     value={modalState.timeStr}
-                    onChange={(e) => setModalState({ ...modalState, timeStr: e.target.value })}
+                    onChange={(e) => {
+                      const nextStart = e.target.value;
+                      setModalState({
+                        ...modalState,
+                        timeStr: nextStart,
+                        endTimeStr: computeEndTimeStr(nextStart, modalState.durationHours)
+                      });
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-medium text-white outline-none focus:border-purple-500 [color-scheme:dark]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                    Bitiş Saati
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={modalState.endTimeStr}
+                    onChange={(e) => {
+                      const nextEnd = e.target.value;
+                      const nextDur = computeDurationHoursFromTimes(modalState.timeStr, nextEnd);
+                      setModalState({
+                        ...modalState,
+                        endTimeStr: nextEnd,
+                        durationHours: nextDur
+                      });
+                    }}
                     className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-medium text-white outline-none focus:border-purple-500 [color-scheme:dark]"
                   />
                 </div>
@@ -1156,18 +1454,30 @@ export const ScheduleSettings: React.FC = () => {
               {/* Duration */}
               <div>
                 <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
-                  Yayın Süresi
+                  Hızlı Yayın Süresi
                 </label>
                 <select
                   value={modalState.durationHours}
-                  onChange={(e) => setModalState({ ...modalState, durationHours: Number(e.target.value) })}
+                  onChange={(e) => {
+                    const nextDur = Number(e.target.value);
+                    setModalState({
+                      ...modalState,
+                      durationHours: nextDur,
+                      endTimeStr: computeEndTimeStr(modalState.timeStr, nextDur)
+                    });
+                  }}
                   className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-medium text-white outline-none focus:border-purple-500"
                 >
-                  {![0.5, 1, 1.5, 2, 3, 4, 6, 8].includes(modalState.durationHours) && (
+                  {![0.0167, 0.0833, 0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8].some(
+                    v => Math.abs(v - modalState.durationHours) < 0.002
+                  ) && (
                     <option value={modalState.durationHours}>
-                      {Math.round(modalState.durationHours * 60)} Dakika (Otomatik Ayarlandı)
+                      {Math.round(modalState.durationHours * 60)} Dakika ({modalState.timeStr} - {modalState.endTimeStr})
                     </option>
                   )}
+                  <option value={Number((1 / 60).toFixed(4))}>1 Dakika</option>
+                  <option value={Number((5 / 60).toFixed(4))}>5 Dakika</option>
+                  <option value={0.25}>15 Dakika</option>
                   <option value={0.5}>30 Dakika</option>
                   <option value={1}>1 Saat</option>
                   <option value={1.5}>1.5 Saat</option>

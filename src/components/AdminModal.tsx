@@ -25,11 +25,19 @@ import {
   Gauge,
   Clock,
   FolderPlus,
-  ListMusic
+  ListMusic,
+  Cloud,
+  CloudOff,
+  LogIn,
+  LogOut,
+  Loader2,
+  Building2
 } from 'lucide-react';
 import { useMusic } from '../context/MusicContext';
 import { Track, GenreCategory, VenueSector, RadioStation } from '../types';
-import { findMatchingPlaylistIds } from '../utils/playlistMatcher';
+import { findMatchingPlaylistIds, getTracksForGenre, isTrackInGenre } from '../utils/playlistMatcher';
+import { fileToDataUrl } from '../utils/firebaseTrackStore';
+import { AdminVenueManagement } from './AdminVenueManagement';
 
 export const AdminModal: React.FC = () => {
   const { 
@@ -69,10 +77,20 @@ export const AdminModal: React.FC = () => {
     currentTrack,
     isPlaying,
     playTrack,
-    togglePlay
+    togglePlay,
+    firebaseUser,
+    isFirebaseAdmin,
+    isCloudSyncing,
+    cloudSyncStatus,
+    cloudSyncError,
+    signInWithGoogleAdmin,
+    signOutFirebaseAdmin,
+    syncTrackToCloudAsync,
+    managedVenues,
+    theme
   } = useMusic();
 
-  type AdminTab = 'tracks' | 'track-list' | 'genres' | 'sectors' | 'radios' | 'mood-bpm';
+  type AdminTab = 'tracks' | 'track-list' | 'genres' | 'sectors' | 'radios' | 'mood-bpm' | 'venues';
   const [activeTab, setActiveTab] = useState<AdminTab>('tracks');
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
 
@@ -92,6 +110,7 @@ export const AdminModal: React.FC = () => {
   const [selectedTargetPlaylists, setSelectedTargetPlaylists] = useState<string[]>([]);
   const [isAudioPreviewPlaying, setIsAudioPreviewPlaying] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioConversionPromiseRef = useRef<Promise<string> | null>(null);
 
   // Auto-sync matching playlists when genre or sectors change
   React.useEffect(() => {
@@ -137,9 +156,15 @@ export const AdminModal: React.FC = () => {
   const [selectedMoodForSongManage, setSelectedMoodForSongManage] = useState<string | null>(null);
   const [bpmFilterCategory, setBpmFilterCategory] = useState<'all' | 'slow' | 'mid' | 'fast'>('all');
 
-  // Search & Toast & Share Modal
+  // Search & Toast & Share Modal & In-app Confirm Dialog
   const [searchTerm, setSearchTerm] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => void;
+  } | null>(null);
   const [shareResultModal, setShareResultModal] = useState<{
     open: boolean;
     shareCode: string;
@@ -177,15 +202,13 @@ export const AdminModal: React.FC = () => {
       }
     };
 
-    // Read as Base64 Data URL for persistent storage in localStorage
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        // If file is within reasonable size, store as data URL for persistent offline playback
-        setAudioFileData(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    // Read as Base64 Data URL for persistent storage in IndexedDB & Firestore
+    const conversionPromise = fileToDataUrl(file).then((dataUrl) => {
+      setAudioFileData(dataUrl);
+      return dataUrl;
+    });
+    audioConversionPromiseRef.current = conversionPromise;
+    conversionPromise.catch(console.error);
 
     showToast(`"${file.name}" ses dosyası başarıyla yüklendi.`);
   };
@@ -269,13 +292,28 @@ export const AdminModal: React.FC = () => {
     setSelectedSectors(['Kafe & Kahve Dükkanı']);
     setBpm(110);
     setSynthPreset('chill');
+    audioConversionPromiseRef.current = null;
     if (previewAudioRef.current) {
       previewAudioRef.current.pause();
       setIsAudioPreviewPlaying(false);
     }
   };
 
-  const handleTrackSubmit = (e?: React.FormEvent) => {
+  const resolveReadyAudioUrl = async (): Promise<string> => {
+    if (audioFileData && !audioFileData.startsWith('blob:')) {
+      return audioFileData;
+    }
+    if (audioConversionPromiseRef.current) {
+      try {
+        return await audioConversionPromiseRef.current;
+      } catch {
+        // fallback to current state
+      }
+    }
+    return audioFileData || `synth:${synthPreset}`;
+  };
+
+  const handleTrackSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!title.trim() && !audioFileName) {
       showToast('Lütfen şarkı adı alanını doldurunuz veya ses dosyası seçiniz!');
@@ -283,10 +321,10 @@ export const AdminModal: React.FC = () => {
     }
 
     const effectiveTitle = title.trim() || (audioFileName ? audioFileName.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ') : 'Yeni Parça');
-    const effectiveArtist = artist.trim() || 'müzikbank Sanatçısı';
+    const effectiveArtist = artist.trim() || 'Staff Sanatçısı';
     // Default aesthetic fallback if no device image uploaded
     const effectiveCover = coverImageData || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop';
-    const effectiveAudio = audioFileData || `synth:${synthPreset}`;
+    const effectiveAudio = await resolveReadyAudioUrl();
 
     if (editingTrackId) {
       updateTrack(editingTrackId, {
@@ -301,7 +339,11 @@ export const AdminModal: React.FC = () => {
         bpm: Number(bpm),
         synthPreset
       });
-      showToast(`"${effectiveTitle}" parçası güncellendi ve listelere uygulandı!`);
+      showToast(
+        isFirebaseAdmin
+          ? `"${effectiveTitle}" güncellendi ve buluta kalıcı olarak kaydedildi!`
+          : `"${effectiveTitle}" parçası güncellendi ve listelere uygulandı!`
+      );
       resetTrackForm();
       setActiveTab('track-list');
       saveAndApplyAllChanges();
@@ -322,7 +364,11 @@ export const AdminModal: React.FC = () => {
         synthPreset,
         targetPlaylistIds: selectedTargetPlaylists
       });
-      showToast(`"${effectiveTitle}" parçası "${genre}" türüne, "${selectedSectors.join(', ')}" sektörüne ve playlistlere eklendi!`);
+      showToast(
+        isFirebaseAdmin
+          ? `"${effectiveTitle}" kalıcı olarak buluta ve playlistlere kaydedildi!`
+          : `"${effectiveTitle}" parçası eklendi! (Kalıcı bulut kaydı için Google Yönetici Girişi yapın)`
+      );
       resetTrackForm();
       setActiveTab('track-list');
       saveAndApplyAllChanges();
@@ -403,13 +449,13 @@ export const AdminModal: React.FC = () => {
   };
 
   // Save & Apply All Changes handler
-  const handleSaveAndApply = () => {
+  const handleSaveAndApply = async () => {
     let newlyCommittedTitle: string | null = null;
     if (activeTab === 'tracks' && (title.trim() || artist.trim() || audioFileData || coverImageData)) {
       const effectiveTitle = title.trim() || (audioFileName ? audioFileName.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ') : 'Yeni Parça');
-      const effectiveArtist = artist.trim() || 'müzikbank Sanatçısı';
+      const effectiveArtist = artist.trim() || 'Staff Sanatçısı';
       const effectiveCover = coverImageData || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop';
-      const effectiveAudio = audioFileData || `synth:${synthPreset}`;
+      const effectiveAudio = await resolveReadyAudioUrl();
 
       if (editingTrackId) {
         updateTrack(editingTrackId, {
@@ -481,7 +527,13 @@ export const AdminModal: React.FC = () => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md select-none animate-fadeIn">
       {/* Modal Container */}
-      <div className="relative w-full max-w-5xl h-[92vh] max-h-[850px] bg-[#0c0c11] border border-purple-500/40 rounded-3xl shadow-2xl shadow-purple-950/80 flex flex-col overflow-hidden">
+      <div
+        className={`relative w-full max-w-5xl h-[92vh] max-h-[850px] rounded-3xl shadow-2xl flex flex-col overflow-hidden ${
+          theme === 'light'
+            ? 'bg-white border border-purple-200 shadow-purple-950/20'
+            : 'bg-[#0c0c11] border border-purple-500/40 shadow-purple-950/80'
+        }`}
+      >
         
         {/* Top Header */}
         <div className="px-6 py-4 bg-zinc-950/90 border-b border-zinc-900 flex items-center justify-between flex-shrink-0">
@@ -492,7 +544,7 @@ export const AdminModal: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
-                  müzikbank Admin Gelişmiş Yönetim Paneli
+                  Staff Admin Gelişmiş Yönetim Paneli
                 </h2>
                 <span className="text-[10px] font-black uppercase tracking-wider bg-purple-950 border border-purple-700/60 text-purple-300 px-2 py-0.5 rounded-full">
                   Canlı Yayın & İçerik
@@ -536,6 +588,62 @@ export const AdminModal: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Firebase Cloud Persistence Status Bar */}
+        <div className="px-6 py-2 bg-zinc-950/80 border-b border-zinc-900 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            {isCloudSyncing ? (
+              <Loader2 className="w-3.5 h-3.5 text-purple-400 animate-spin flex-shrink-0" />
+            ) : isFirebaseAdmin ? (
+              <Cloud className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+            ) : (
+              <CloudOff className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+            )}
+
+            {isFirebaseAdmin ? (
+              <span className="text-emerald-300 font-medium truncate">
+                Firebase Bulut Depolama Aktif ({firebaseUser?.email}) — Yüklenen MP3&apos;ler ve silmeler kalıcıdır
+              </span>
+            ) : (
+              <span className="text-amber-300/90 font-medium truncate">
+                MP3 yükleme ve silmelerin tüm oturumlarda kalıcı olması için Google Yönetici Girişi yapın
+              </span>
+            )}
+
+            {cloudSyncStatus && !cloudSyncError && !isCloudSyncing && (
+              <span className="hidden md:inline-block text-[11px] text-zinc-400 truncate">
+                • {cloudSyncStatus}
+              </span>
+            )}
+            {cloudSyncError && (
+              <span className="text-[11px] text-rose-400 font-medium truncate">
+                • {cloudSyncError}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {isFirebaseAdmin ? (
+              <button
+                type="button"
+                onClick={() => void signOutFirebaseAdmin()}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-colors"
+              >
+                <LogOut className="w-3 h-3" />
+                <span>Bulut Çıkışı</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void signInWithGoogleAdmin()}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold text-white bg-purple-600 hover:bg-purple-500 border border-purple-400/40 transition-colors"
+              >
+                <LogIn className="w-3 h-3" />
+                <span>Google ile Yönetici Girişi</span>
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* Navigation Tabs Bar */}
         <div className="px-6 bg-zinc-950 flex items-center justify-between border-b border-zinc-900 overflow-x-auto custom-scrollbar flex-shrink-0">
@@ -614,14 +722,32 @@ export const AdminModal: React.FC = () => {
               <Gauge className="w-3.5 h-3.5 text-amber-400" />
               <span>Mod & BPM</span>
             </button>
+
+            <button
+              onClick={() => setActiveTab('venues')}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-all ${
+                activeTab === 'venues'
+                  ? 'border-purple-500 text-purple-300 bg-purple-950/20'
+                  : 'border-transparent text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Mekan Yönetimi ({managedVenues.length})</span>
+            </button>
           </div>
 
           <button
+            type="button"
             onClick={() => {
-              if (window.confirm('Tüm kataloğu ve ayarları varsayılan müzikbank durumuna sıfırlamak istiyor musunuz?')) {
-                resetCatalogToDefault();
-                showToast('Katalog varsayılana sıfırlandı.');
-              }
+              setConfirmAction({
+                title: 'Kataloğu Varsayılana Sıfırla',
+                message: 'Tüm kataloğu ve ayarları varsayılan Staff durumuna sıfırlamak istiyor musunuz?',
+                confirmLabel: 'Evet, Sıfırla',
+                onConfirm: () => {
+                  resetCatalogToDefault();
+                  showToast('Katalog varsayılana sıfırlandı.');
+                }
+              });
             }}
             className="flex items-center gap-1.5 text-[11px] text-zinc-500 hover:text-rose-400 transition-colors ml-4 whitespace-nowrap"
             title="Varsayılan kataloğu geri yükle"
@@ -632,7 +758,13 @@ export const AdminModal: React.FC = () => {
         </div>
 
         {/* Body Content Area */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6 custom-scrollbar bg-black/40">
+        <div
+          className={`flex-1 overflow-y-auto p-5 sm:p-6 custom-scrollbar ${
+            theme === 'light'
+              ? 'bg-gradient-to-br from-white via-[#faf8ff] to-[#f3f0ff]'
+              : 'bg-black/40'
+          }`}
+        >
           
           {/* TAB 1: ADD / EDIT TRACK (DEVICE MP3 & IMAGE UPLOAD) */}
           {activeTab === 'tracks' && (
@@ -1005,7 +1137,9 @@ export const AdminModal: React.FC = () => {
                             }
                           }}
                           className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                            isCur && isPlaying
+                            theme === 'light'
+                              ? 'bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 text-white shadow-md shadow-purple-500/25 hover:brightness-110'
+                              : isCur && isPlaying
                               ? 'bg-purple-600 text-white'
                               : 'bg-zinc-900 text-zinc-300 hover:bg-purple-600 hover:text-white'
                           }`}
@@ -1042,6 +1176,21 @@ export const AdminModal: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {isFirebaseAdmin && (trk.audioUrl?.startsWith('data:') || trk.audioUrl?.startsWith('idb:')) && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const assignedIds = playlists.filter(p => p.trackIds.includes(trk.id)).map(p => p.id);
+                              const ok = await syncTrackToCloudAsync(trk, assignedIds);
+                              if (ok) showToast(`"${trk.title}" buluta eşitlendi.`);
+                            }}
+                            className="p-2 rounded-lg text-emerald-400 hover:text-emerald-300 hover:bg-zinc-900 transition-colors"
+                            title="Buluta Kalıcı Kaydet / Eşitle"
+                          >
+                            <Cloud className="w-4 h-4" />
+                          </button>
+                        )}
+
                         <button
                           onClick={() => handleEditClick(trk)}
                           className="p-2 rounded-lg text-zinc-400 hover:text-purple-300 hover:bg-zinc-900 transition-colors"
@@ -1051,14 +1200,24 @@ export const AdminModal: React.FC = () => {
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => {
-                            if (window.confirm(`"${trk.title}" parçasını silmek istediğinize emin misiniz?`)) {
-                              deleteTrack(trk.id);
-                              showToast('Parça silindi.');
-                            }
+                            setConfirmAction({
+                              title: 'Parçayı Kalıcı Olarak Sil',
+                              message: `"${trk.title}" parçasını kalıcı olarak silmek istediğinize emin misiniz?`,
+                              confirmLabel: 'Evet, Kalıcı Sil',
+                              onConfirm: () => {
+                                deleteTrack(trk.id);
+                                showToast(
+                                  isFirebaseAdmin
+                                    ? 'Parça kalıcı olarak silindi.'
+                                    : 'Parça yerel olarak silindi. Buluttan silmek için Google Yönetici Girişi yapın.'
+                                );
+                              }
+                            });
                           }}
                           className="p-2 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-zinc-900 transition-colors"
-                          title="Sil"
+                          title="Kalıcı Sil"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -1148,7 +1307,7 @@ export const AdminModal: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   {genres.map(g => {
-                    const assignedTracks = tracks.filter(t => t.genre.toLowerCase() === g.name.toLowerCase());
+                    const assignedTracks = getTracksForGenre(tracks, g.name);
                     const isManaging = selectedGenreForSongManage === g.name;
 
                     return (
@@ -1184,11 +1343,17 @@ export const AdminModal: React.FC = () => {
                             </button>
 
                             <button
+                              type="button"
                               onClick={() => {
-                                if (window.confirm(`"${g.name}" türünü silmek istediğinize emin misiniz?`)) {
-                                  deleteGenre(g.name);
-                                  showToast(`"${g.name}" türü silindi.`);
-                                }
+                                setConfirmAction({
+                                  title: 'Türü Sil',
+                                  message: `"${g.name}" türünü silmek istediğinize emin misiniz?`,
+                                  confirmLabel: 'Evet, Sil',
+                                  onConfirm: () => {
+                                    deleteGenre(g.name);
+                                    showToast(`"${g.name}" türü silindi.`);
+                                  }
+                                });
                               }}
                               className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 transition-colors"
                               title="Türü Sil"
@@ -1208,7 +1373,7 @@ export const AdminModal: React.FC = () => {
 
                             <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
                               {tracks.map(t => {
-                                const isAssigned = t.genre.toLowerCase() === g.name.toLowerCase();
+                                const isAssigned = isTrackInGenre(t, g.name);
                                 return (
                                   <div
                                     key={t.id}
@@ -1368,11 +1533,17 @@ export const AdminModal: React.FC = () => {
                             </button>
 
                             <button
+                              type="button"
                               onClick={() => {
-                                if (window.confirm(`"${sec.name}" sektörünü silmek istediğinize emin misiniz?`)) {
-                                  deleteSector(sec.name);
-                                  showToast(`"${sec.name}" sektörü silindi.`);
-                                }
+                                setConfirmAction({
+                                  title: 'Sektörü Sil',
+                                  message: `"${sec.name}" sektörünü silmek istediğinize emin misiniz?`,
+                                  confirmLabel: 'Evet, Sil',
+                                  onConfirm: () => {
+                                    deleteSector(sec.name);
+                                    showToast(`"${sec.name}" sektörü silindi.`);
+                                  }
+                                });
                               }}
                               className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 transition-colors"
                               title="Sektörü Sil"
@@ -1457,7 +1628,7 @@ export const AdminModal: React.FC = () => {
                       required
                       value={newRadioName}
                       onChange={(e) => setNewRadioName(e.target.value)}
-                      placeholder="Örn: müzikbank Sunset FM"
+                      placeholder="Örn: Staff Sunset FM"
                       className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white outline-none focus:border-purple-500"
                     />
                   </div>
@@ -1565,11 +1736,17 @@ export const AdminModal: React.FC = () => {
                             </button>
 
                             <button
+                              type="button"
                               onClick={() => {
-                                if (window.confirm(`"${rad.name}" radyosunu silmek istediğinize emin misiniz?`)) {
-                                  deleteRadio(rad.id);
-                                  showToast(`"${rad.name}" radyosu silindi.`);
-                                }
+                                setConfirmAction({
+                                  title: 'Radyoyu Sil',
+                                  message: `"${rad.name}" radyosunu silmek istediğinize emin misiniz?`,
+                                  confirmLabel: 'Evet, Sil',
+                                  onConfirm: () => {
+                                    deleteRadio(rad.id);
+                                    showToast(`"${rad.name}" radyosu silindi.`);
+                                  }
+                                });
                               }}
                               className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 transition-colors"
                               title="Radyoyu Sil"
@@ -1716,10 +1893,15 @@ export const AdminModal: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => {
-                            if (window.confirm(`"${m}" modunu silmek istediğinize emin misiniz?`)) {
-                              deleteMood(m);
-                              showToast(`"${m}" modu silindi.`);
-                            }
+                            setConfirmAction({
+                              title: 'Modu Sil',
+                              message: `"${m}" modunu silmek istediğinize emin misiniz?`,
+                              confirmLabel: 'Evet, Sil',
+                              onConfirm: () => {
+                                deleteMood(m);
+                                showToast(`"${m}" modu silindi.`);
+                              }
+                            });
                           }}
                           className="text-zinc-500 hover:text-rose-400 p-0.5 rounded transition-colors"
                           title="Modu Sil"
@@ -1856,13 +2038,22 @@ export const AdminModal: React.FC = () => {
             </div>
           )}
 
+          {/* TAB 7: MEKAN YÖNETİMİ (ADMIN VENUE, PACKAGE & BUSINESS TRACKER) */}
+          {activeTab === 'venues' && (
+            <AdminVenueManagement onShowToast={showToast} />
+          )}
+
         </div>
 
         {/* Bottom Bar with "Kaydet ve Paylaş" */}
         <div className="px-6 py-3.5 bg-zinc-950 border-t border-zinc-900 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2 text-xs text-zinc-400">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Tüm değişiklikler anında yerel veritabanına işlenir</span>
+            <span>
+              {isFirebaseAdmin
+                ? 'Yüklenen MP3 ve silme işlemleri kalıcı olarak Firebase buluta ve yerel diske işlenir'
+                : 'Tüm değişiklikler anında yerel veritabanına işlenir (kalıcı bulut için giriş yapın)'}
+            </span>
           </div>
 
           <div className="flex items-center gap-3">
@@ -1938,6 +2129,53 @@ export const AdminModal: React.FC = () => {
                 className="w-full py-3 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:brightness-110 shadow-lg shadow-purple-950 transition-all"
               >
                 Tamam ve Uygulamaya Dön
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* In-App Delete / Reset Confirmation Modal (works reliably inside iframes) */}
+      {confirmAction && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn"
+          onClick={() => setConfirmAction(null)}
+        >
+          <div
+            className="relative w-full max-w-sm bg-zinc-950 border border-rose-500/40 rounded-3xl p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-rose-950/60 text-rose-400 border border-rose-700/40 flex-shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-base font-extrabold text-white">{confirmAction.title}</h4>
+                <p className="text-[11px] text-zinc-400">Bu işlem geri alınamaz.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3.5">
+              {confirmAction.message}
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmAction(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const action = confirmAction.onConfirm;
+                  setConfirmAction(null);
+                  action();
+                }}
+                className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-950/50 transition-all"
+              >
+                {confirmAction.confirmLabel || 'Evet, Sil'}
               </button>
             </div>
           </div>

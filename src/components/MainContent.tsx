@@ -15,7 +15,6 @@ import {
   Music,
   Share2,
   Plus,
-  ShieldCheck,
   Trash2,
   ListMusic,
   Search,
@@ -25,11 +24,39 @@ import {
 } from 'lucide-react';
 import { useMusic } from '../context/MusicContext';
 import { FilterBar } from './FilterBar';
-import { VenueManagement } from './VenueManagement';
 import { ScheduleSettings } from './ScheduleSettings';
 import { VENUE_SECTORS, GENRE_CATEGORIES } from '../data/initialData';
 import { Track, Playlist } from '../types';
 import { isTrackInSector, isTrackInGenre, getTracksForSector, getTracksForGenre, getTracksForPlaylist } from '../utils/playlistMatcher';
+
+const PASTEL_TEXT_DARK = [
+  'text-[#d8b4fe]',
+  'text-[#a7f3d0]',
+  'text-[#fbcfe8]',
+  'text-[#bae6fd]',
+  'text-[#fde68a]',
+  'text-[#fed7aa]',
+  'text-[#c7d2fe]',
+];
+
+const PASTEL_TEXT_LIGHT = [
+  'text-[#7e22ce]',
+  'text-[#0f766e]',
+  'text-[#be185d]',
+  'text-[#0369a1]',
+  'text-[#b45309]',
+  'text-[#c2410c]',
+  'text-[#4338ca]',
+];
+
+function getPastelTextClass(label: string, theme: 'dark' | 'light', offset = 0): string {
+  let hash = offset;
+  for (let i = 0; i < label.length; i++) {
+    hash = (hash * 31 + label.charCodeAt(i)) >>> 0;
+  }
+  const palette = theme === 'light' ? PASTEL_TEXT_LIGHT : PASTEL_TEXT_DARK;
+  return palette[hash % palette.length];
+}
 
 export const MainContent: React.FC = () => {
   const { 
@@ -66,7 +93,8 @@ export const MainContent: React.FC = () => {
     setIsNewPlaylistModalOpen,
     deletePlaylist,
     removeTrackFromPlaylist,
-    user
+    user,
+    theme
   } = useMusic();
 
   const [playlistToDelete, setPlaylistToDelete] = useState<Playlist | null>(null);
@@ -307,11 +335,6 @@ export const MainContent: React.FC = () => {
     }
   }
 
-  // VENUE MANAGEMENT TAB
-  if (activeTab === 'venue-management') {
-    return <VenueManagement />;
-  }
-
   // SETTINGS / AUTO-PLAY SCHEDULE TAB
   if (activeTab === 'settings') {
     return <ScheduleSettings />;
@@ -507,8 +530,7 @@ export const MainContent: React.FC = () => {
     // Detail view when a sector is selected
     if (selectedSectorDetail) {
       const sectorData = sectors.find(s => s.name.toLowerCase() === selectedSectorDetail.toLowerCase());
-      const sectorTracks = getTracksForSector(tracks, selectedSectorDetail);
-      const displayTracks = sectorTracks.length > 0 ? sectorTracks : tracks.slice(0, 8);
+      const displayTracks = getTracksForSector(tracks, selectedSectorDetail);
 
       return (
         <div className="p-6 md:p-8 space-y-6 select-none">
@@ -548,12 +570,17 @@ export const MainContent: React.FC = () => {
 
               <div className="flex items-center gap-3 pt-2">
                 <button
+                  disabled={displayTracks.length === 0}
                   onClick={() => {
                     if (displayTracks.length > 0) {
                       playTrack(displayTracks[0], displayTracks);
                     }
                   }}
-                  className="flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold text-white bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:via-violet-500 hover:to-indigo-500 shadow-xl shadow-purple-900/50 transition-all active:scale-95"
+                  className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold text-white bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 shadow-xl shadow-purple-900/50 transition-all ${
+                    displayTracks.length === 0
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'hover:from-purple-500 hover:via-violet-500 hover:to-indigo-500 active:scale-95'
+                  }`}
                 >
                   <Play className="w-4 h-4 fill-current ml-0.5" />
                   <span>Tümünü Çal</span>
@@ -577,7 +604,12 @@ export const MainContent: React.FC = () => {
           <div className="space-y-2">
             <h3 className="text-sm font-bold text-zinc-300 px-2">Bu Sektöre Özel Parçalar ({displayTracks.length})</h3>
             <div className="space-y-2">
-              {displayTracks.map((trk) => {
+              {displayTracks.length === 0 ? (
+                <div className="p-10 text-center bg-zinc-950/60 rounded-2xl border border-zinc-900 text-zinc-500 text-xs">
+                  Bu sektörde henüz tanımlanmış parça bulunmuyor. Admin panelinden bu sektöre parça ekleyebilirsiniz.
+                </div>
+              ) : (
+                displayTracks.map((trk) => {
                 const isCurr = currentTrack?.id === trk.id;
                 const isFavTrk = isFavoriteTrack(trk.id);
                 return (
@@ -601,7 +633,9 @@ export const MainContent: React.FC = () => {
                           }
                         }}
                         className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                          isCurr && isPlaying
+                          theme === 'light'
+                            ? 'bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 text-white shadow-md shadow-purple-500/25 hover:brightness-110'
+                            : isCurr && isPlaying
                             ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg'
                             : 'bg-zinc-900 text-zinc-300 hover:text-white hover:bg-purple-600'
                         }`}
@@ -651,7 +685,8 @@ export const MainContent: React.FC = () => {
                     </div>
                   </div>
                 );
-              })}
+              })
+              )}
             </div>
           </div>
 
@@ -687,7 +722,6 @@ export const MainContent: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
           {sectors.map((sec) => {
             const sectorTracks = getTracksForSector(tracks, sec.name);
-            const playList = sectorTracks.length > 0 ? sectorTracks : tracks;
             return (
               <div
                 key={sec.name}
@@ -710,19 +744,21 @@ export const MainContent: React.FC = () => {
                       {sec.badgeTitle || sec.name.toUpperCase()}
                     </div>
 
-                    {/* Hover Play Button */}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          playTrack(playList[0], playList);
-                        }}
-                        className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-xl shadow-purple-950 hover:scale-110 active:scale-95 transition-all"
-                        title={`${sec.name} Müziklerini Çal`}
-                      >
-                        <Play className="w-5 h-5 fill-current ml-0.5" />
-                      </button>
-                    </div>
+                    {/* Hover Play Button (only when tracks exist) */}
+                    {sectorTracks.length > 0 && (
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            playTrack(sectorTracks[0], sectorTracks);
+                          }}
+                          className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-xl shadow-purple-950 hover:scale-110 active:scale-95 transition-all"
+                          title={`${sec.name} Müziklerini Çal`}
+                        >
+                          <Play className="w-5 h-5 fill-current ml-0.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <h3 className="text-sm font-bold text-white group-hover:text-purple-300 transition-colors">
@@ -753,8 +789,7 @@ export const MainContent: React.FC = () => {
     // Detail view when a genre is selected
     if (selectedGenreDetail) {
       const genreData = genres.find(g => g.name.toLowerCase() === selectedGenreDetail.toLowerCase());
-      const genreTracks = getTracksForGenre(tracks, selectedGenreDetail);
-      const displayTracks = genreTracks.length > 0 ? genreTracks : tracks.slice(0, 8);
+      const displayTracks = getTracksForGenre(tracks, selectedGenreDetail);
 
       return (
         <div className="p-6 md:p-8 space-y-6">
@@ -794,12 +829,17 @@ export const MainContent: React.FC = () => {
 
               <div className="flex items-center gap-3 pt-2">
                 <button
+                  disabled={displayTracks.length === 0}
                   onClick={() => {
                     if (displayTracks.length > 0) {
                       playTrack(displayTracks[0], displayTracks);
                     }
                   }}
-                  className="flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold text-white bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:via-violet-500 hover:to-indigo-500 shadow-xl shadow-purple-900/50 transition-all active:scale-95"
+                  className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold text-white bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 shadow-xl shadow-purple-900/50 transition-all ${
+                    displayTracks.length === 0
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'hover:from-purple-500 hover:via-violet-500 hover:to-indigo-500 active:scale-95'
+                  }`}
                 >
                   <Play className="w-4 h-4 fill-current ml-0.5" />
                   <span>Tümünü Çal</span>
@@ -823,7 +863,12 @@ export const MainContent: React.FC = () => {
           <div className="space-y-2">
             <h3 className="text-sm font-bold text-zinc-300 px-2">Bu Türdeki Parçalar ({displayTracks.length})</h3>
             <div className="space-y-2">
-              {displayTracks.map((trk) => {
+              {displayTracks.length === 0 ? (
+                <div className="p-10 text-center bg-zinc-950/60 rounded-2xl border border-zinc-900 text-zinc-500 text-xs">
+                  Bu türde henüz tanımlanmış parça bulunmuyor. Admin panelinden bu türe şarkı ekleyebilir veya yeni yüklemelerde bu türü seçebilirsiniz.
+                </div>
+              ) : (
+                displayTracks.map((trk) => {
                 const isCurr = currentTrack?.id === trk.id;
                 const isFavTrk = isFavoriteTrack(trk.id);
                 return (
@@ -847,7 +892,9 @@ export const MainContent: React.FC = () => {
                           }
                         }}
                         className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                          isCurr && isPlaying
+                          theme === 'light'
+                            ? 'bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 text-white shadow-md shadow-purple-500/25 hover:brightness-110'
+                            : isCurr && isPlaying
                             ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg'
                             : 'bg-zinc-900 text-zinc-300 hover:text-white hover:bg-purple-600'
                         }`}
@@ -897,7 +944,8 @@ export const MainContent: React.FC = () => {
                     </div>
                   </div>
                 );
-              })}
+              })
+              )}
             </div>
           </div>
 
@@ -955,23 +1003,21 @@ export const MainContent: React.FC = () => {
                       {g.badgeTitle}
                     </div>
 
-                    {/* Hover Play Button */}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (matchingTracks.length > 0) {
+                    {/* Hover Play Button (only when tracks exist) */}
+                    {matchingTracks.length > 0 && (
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                             playTrack(matchingTracks[0], matchingTracks);
-                          } else {
-                            playTrack(tracks[0], tracks);
-                          }
-                        }}
-                        className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-xl shadow-purple-950 hover:scale-110 active:scale-95 transition-all"
-                        title={`${g.name} Türünü Çal`}
-                      >
-                        <Play className="w-5 h-5 fill-current ml-0.5" />
-                      </button>
-                    </div>
+                          }}
+                          className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-xl shadow-purple-950 hover:scale-110 active:scale-95 transition-all"
+                          title={`${g.name} Türünü Çal`}
+                        >
+                          <Play className="w-5 h-5 fill-current ml-0.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <h3 className="text-sm font-bold text-white group-hover:text-purple-300 transition-colors">
@@ -1188,28 +1234,30 @@ export const MainContent: React.FC = () => {
   return (
     <div className="p-6 md:p-8 space-y-6 select-none">
       
-      {/* Top Hero Container with Purple to Black Gradient matching user reference */}
-      <div className="relative overflow-hidden p-6 sm:p-7 rounded-3xl bg-gradient-to-b from-purple-700 via-purple-950/85 to-black border-t border-x border-purple-500/30 border-b border-zinc-900/50 shadow-2xl shadow-purple-950/60 space-y-4">
-        {/* Subtle luminous ambient glow and top specular highlight */}
-        <div className="absolute -top-16 left-12 w-80 h-32 bg-purple-400/25 blur-3xl pointer-events-none rounded-full" />
-        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-purple-300/60 to-transparent pointer-events-none" />
-
+      {/* Search & Filter Section */}
+      <div className="space-y-4">
         {/* Search Bar */}
         <div className="relative w-full z-10">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-            <Search className="w-4 h-4 text-purple-300" />
+            <Search className={`w-4 h-4 ${theme === 'light' ? 'text-purple-600' : 'text-white'}`} />
           </div>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Şarkı, sanatçı, tür (Ambient, Bossa, House...), mekan ara..."
-            className="w-full pl-11 pr-24 py-3 bg-black/45 backdrop-blur-md hover:bg-black/60 focus:bg-black/75 text-sm text-zinc-100 placeholder-purple-200/50 rounded-2xl border border-white/10 hover:border-purple-400/40 focus:border-purple-400 focus:ring-1 focus:ring-purple-400 outline-none transition-all shadow-inner shadow-black/50"
+            className={`w-full pl-11 pr-24 py-3 text-sm rounded-2xl outline-none transition-all ${
+              theme === 'light'
+                ? 'bg-white hover:bg-white focus:bg-white text-zinc-900 placeholder-zinc-400 border border-zinc-200/90 focus:border-purple-400 focus:ring-2 focus:ring-purple-300/60 shadow-sm'
+                : 'bg-black/45 backdrop-blur-md hover:bg-black/60 focus:bg-black/75 text-zinc-100 placeholder-purple-200/50 border border-white hover:border-white focus:border-white focus:ring-1 focus:ring-white/80 shadow-inner shadow-black/50'
+            }`}
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute inset-y-0 right-0 pr-4 flex items-center gap-1 text-xs text-zinc-300 hover:text-white font-medium transition-colors"
+              className={`absolute inset-y-0 right-0 pr-4 flex items-center gap-1 text-xs font-medium transition-colors ${
+                theme === 'light' ? 'text-zinc-500 hover:text-zinc-900' : 'text-zinc-300 hover:text-white'
+              }`}
             >
               <X className="w-3.5 h-3.5" />
               <span>Temizle</span>
@@ -1374,26 +1422,39 @@ export const MainContent: React.FC = () => {
 
         {/* Tracks Table / List */}
         <div className="space-y-2">
+          {filteredTracks.length > 0 && (
+            <div className="grid grid-cols-[1fr_auto] md:grid-cols-[minmax(220px,2.1fr)_1fr_1.3fr_0.7fr_96px] items-center gap-3 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-900/70">
+              <div className="pl-1">Parça / Sanatçı</div>
+              <div className="hidden md:block text-center">Tür</div>
+              <div className="hidden md:block text-center">Mod</div>
+              <div className="hidden md:block text-center">BPM</div>
+              <div className="flex items-center justify-end gap-3">
+                <span className="hidden sm:inline w-10 text-center">Süre</span>
+                <span className="w-8" />
+              </div>
+            </div>
+          )}
+
           {filteredTracks.length === 0 ? (
             <div className="p-12 text-center bg-zinc-950/60 rounded-2xl border border-zinc-900 text-zinc-500 text-xs">
               Seçilen filtrelere uygun parça bulunamadı. Filtreleri sıfırlayabilirsiniz.
             </div>
           ) : (
-            filteredTracks.map((trk, i) => {
+            filteredTracks.map((trk) => {
               const isCurrent = currentTrack?.id === trk.id;
               const isFav = isFavoriteTrack(trk.id);
               return (
                 <div
                   key={trk.id}
                   onClick={() => playTrack(trk, filteredTracks)}
-                  className={`group flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${
+                  className={`group grid grid-cols-[1fr_auto] md:grid-cols-[minmax(220px,2.1fr)_1fr_1.3fr_0.7fr_96px] items-center gap-3 p-3 rounded-2xl border transition-all cursor-pointer ${
                     isCurrent
                       ? 'bg-purple-950/30 border-purple-500/40 shadow-md shadow-purple-950/30'
                       : 'bg-zinc-950/70 hover:bg-zinc-900/90 border-zinc-900/90 hover:border-purple-500/30'
                   }`}
                 >
                   {/* Left: Play button, Cover, Title, Artist */}
-                  <div className="flex items-center gap-3.5 min-w-0 w-5/12">
+                  <div className="flex items-center gap-3.5 min-w-0">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1404,7 +1465,9 @@ export const MainContent: React.FC = () => {
                         }
                       }}
                       className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                        isCurrent && isPlaying
+                        theme === 'light'
+                          ? 'bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 text-white shadow-md shadow-purple-500/25 hover:brightness-110'
+                          : isCurrent && isPlaying
                           ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg'
                           : 'bg-zinc-900 text-zinc-300 group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-indigo-600 group-hover:text-white'
                       }`}
@@ -1434,22 +1497,30 @@ export const MainContent: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Center: Genre & Mood tags */}
-                  <div className="hidden md:flex items-center gap-2 w-3/12">
-                    <span className="text-[10px] font-bold text-purple-300 bg-purple-950/60 border border-purple-800/50 px-2 py-0.5 rounded-full">
+                  {/* Genre column (centered) */}
+                  <div className="hidden md:flex justify-center text-center min-w-0">
+                    <span className={`text-[11px] font-semibold truncate ${getPastelTextClass(trk.genre, theme, 0)}`}>
                       {trk.genre}
                     </span>
-                    <span className="text-[10px] text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded-full border border-zinc-800">
+                  </div>
+
+                  {/* Mood column (centered) */}
+                  <div className="hidden md:flex justify-center text-center min-w-0">
+                    <span className={`text-[11px] font-medium truncate ${getPastelTextClass(trk.mood, theme, 3)}`}>
                       {trk.mood}
                     </span>
-                    <span className="text-[10px] text-zinc-500 font-mono">
+                  </div>
+
+                  {/* BPM column (centered) */}
+                  <div className="hidden md:flex justify-center text-center">
+                    <span className="text-[11px] text-zinc-500 font-mono whitespace-nowrap">
                       {trk.bpm} BPM
                     </span>
                   </div>
 
-                  {/* Right: Duration, Favorite, License Buy button */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-zinc-500 font-mono hidden sm:inline">
+                  {/* Right: Duration & Favorite */}
+                  <div className="flex items-center justify-end gap-3">
+                    <span className="text-xs text-zinc-500 font-mono hidden sm:inline w-10 text-center">
                       {Math.floor(trk.duration / 60)}:{(trk.duration % 60).toString().padStart(2, '0')}
                     </span>
 
@@ -1458,18 +1529,12 @@ export const MainContent: React.FC = () => {
                         e.stopPropagation();
                         toggleFavoriteTrack(trk.id);
                       }}
-                      className={`p-2 rounded-lg transition-colors ${
+                      className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
                         isFav ? 'text-rose-500' : 'text-zinc-500 hover:text-zinc-300'
                       }`}
                     >
                       <Heart className={`w-4 h-4 ${isFav ? 'fill-current' : ''}`} />
                     </button>
-
-                    {/* Mekan Paketine Dahil badge */}
-                    <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-purple-300 bg-purple-950/40 border border-purple-800/40 shadow-sm">
-                      <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
-                      <span>Mekan Paketine Dahil</span>
-                    </div>
                   </div>
                 </div>
               );

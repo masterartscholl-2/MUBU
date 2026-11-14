@@ -1,19 +1,28 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Segoe UI", -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", "Inter", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "Segoe UI", -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", "Inter", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 *, ::before, ::after {
-  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", "Inter", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 @layer base {
   html, body {
-    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", "Inter", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
     background-color: #000000;
     color: #f4f4f5;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    text-rendering: optimizeLegibility;
+  }
+
+  html.light, html.light body {
+    background-color: #faf9ff;
+    color: #0f172a;
   }
 }
 
@@ -36,6 +45,345 @@
   background: rgba(147, 51, 234, 0.5);
 }
 
+html.light .custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(226, 232, 240, 0.65);
+}
+
+html.light .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(124, 58, 237, 0.35);
+}
+
+html.light .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 58, 237, 0.6);
+}
+
+/* =========================================================
+   LIGHT MODE THEME OVERRIDES (html.light)
+   Preserves vibrant gradient buttons, cover overlays & pastel cards
+   ========================================================= */
+
+/* Main App Canvas & Light Surfaces */
+html.light .bg-black {
+  background-color: #faf9ff !important;
+}
+
+html.light main {
+  background: linear-gradient(145deg, #ffffff 0%, #faf8ff 48%, #f3f0ff 100%) !important;
+}
+
+html.light .bg-black\/95,
+html.light .bg-black\/90 {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+}
+
+html.light .bg-black\/40:not(.absolute) {
+  background-color: rgba(248, 250, 252, 0.85) !important;
+}
+
+html.light .bg-zinc-950,
+html.light .bg-zinc-950\/95,
+html.light .bg-zinc-950\/90,
+html.light .bg-zinc-950\/80,
+html.light .bg-zinc-950\/70,
+html.light .bg-zinc-950\/60,
+html.light .bg-\[\#060608\],
+html.light .bg-\[\#08080b\],
+html.light .bg-\[\#09090d\],
+html.light .bg-\[\#0a0a0e\],
+html.light .bg-\[\#0b0b0f\],
+html.light .bg-\[\#0c0c10\],
+html.light .bg-\[\#0e0e12\],
+html.light .bg-\[\#0f0f14\],
+html.light .bg-\[\#0f0f15\] {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-zinc-900,
+html.light .bg-zinc-900\/90,
+html.light .bg-zinc-900\/80,
+html.light .bg-zinc-900\/70,
+html.light .bg-zinc-900\/60,
+html.light .bg-\[\#111115\],
+html.light .bg-\[\#111116\],
+html.light .bg-\[\#121218\] {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .bg-\[\#13121c\] {
+  background-color: #f5f3ff !important;
+}
+
+html.light .bg-zinc-800,
+html.light .bg-zinc-800\/80,
+html.light .bg-zinc-800\/70 {
+  background-color: #e2e8f0 !important;
+}
+
+html.light .hover\:bg-zinc-900:hover,
+html.light .hover\:bg-zinc-900\/90:hover,
+html.light .hover\:bg-zinc-900\/60:hover,
+html.light .hover\:bg-zinc-800:hover,
+html.light .hover\:bg-zinc-800\/70:hover,
+html.light .hover\:bg-\[\#0f0f15\]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+/* Keep Hero Purple-to-Black gradient banners rich & crisp in Light Mode */
+html.light .bg-gradient-to-b.from-purple-700 {
+  background-image: linear-gradient(145deg, #6d28d9 0%, #5b21b6 55%, #312e81 100%) !important;
+  box-shadow: 0 18px 36px -14px rgba(91, 33, 182, 0.35) !important;
+}
+
+/* Keep gradient cards inside Sidebar/Venue/Pricing clean in Light Mode */
+html.light .bg-gradient-to-b.from-zinc-900\/80.to-zinc-950,
+html.light .bg-gradient-to-r.from-zinc-950 {
+  background-image: linear-gradient(to bottom, #f8fafc, #ffffff) !important;
+}
+
+html.light .bg-gradient-to-b.from-purple-950\/40,
+html.light .bg-gradient-to-b.from-purple-950\/30 {
+  background-image: linear-gradient(to bottom, #f5f3ff, #ffffff) !important;
+}
+
+html.light .bg-gradient-to-b.from-\[\#0e0e13\].to-black {
+  background-image: linear-gradient(to bottom, #ffffff, #f8fafc) !important;
+}
+
+/* Borders */
+html.light .border-zinc-900,
+html.light .border-zinc-900\/90,
+html.light .border-zinc-900\/80 {
+  border-color: #cbd5e1 !important;
+}
+
+html.light .border-zinc-800,
+html.light .border-zinc-800\/90,
+html.light .border-zinc-800\/80,
+html.light .border-zinc-800\/70 {
+  border-color: #cbd5e1 !important;
+}
+
+html.light .border-zinc-700,
+html.light .border-zinc-700\/90,
+html.light .border-zinc-700\/80,
+html.light .border-zinc-700\/75 {
+  border-color: #94a3b8 !important;
+}
+
+html.light .border-zinc-700\/45 {
+  border-color: rgba(148, 163, 184, 0.65) !important;
+}
+
+/* Calendar Month grid gap colors */
+html.light .bg-zinc-700\/80.grid,
+html.light .bg-zinc-700\/75.grid {
+  background-color: #cbd5e1 !important;
+}
+
+/* Primary & Secondary Text Colors */
+html.light .text-white,
+html.light .text-zinc-100,
+html.light .text-zinc-200 {
+  color: #0f172a !important;
+}
+
+html.light .text-zinc-300 {
+  color: #334155 !important;
+}
+
+html.light .text-zinc-400 {
+  color: #475569 !important;
+}
+
+html.light .text-zinc-500 {
+  color: #64748b !important;
+}
+
+html.light .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+
+html.light .hover\:bg-rose-600:hover,
+html.light .hover\:bg-rose-600:hover *,
+html.light .hover\:bg-purple-600:hover,
+html.light .hover\:bg-purple-600:hover *,
+html.light .hover\:bg-emerald-600:hover,
+html.light .hover\:bg-emerald-600:hover *,
+html.light .hover\:bg-zinc-950:hover,
+html.light .hover\:bg-zinc-950:hover * {
+  color: #ffffff !important;
+}
+
+html.light .hover\:bg-zinc-950:hover {
+  background-color: #18181b !important;
+}
+
+html.light .hover\:bg-white\/\[0\.02\]:hover {
+  background-color: rgba(124, 58, 237, 0.06) !important;
+}
+
+html.light .placeholder-zinc-500::placeholder {
+  color: #64748b !important;
+}
+
+html.light select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Protect White Text inside Vibrant Buttons, Badges, Hero Banners & Photo Overlays */
+html.light [class*="from-purple-600"],
+html.light [class*="from-purple-600"] *,
+html.light [class*="from-emerald-600"],
+html.light [class*="from-emerald-600"] *,
+html.light .bg-purple-600,
+html.light .bg-purple-600 *,
+html.light .bg-rose-600,
+html.light .bg-rose-600 *,
+html.light .bg-emerald-600,
+html.light .bg-emerald-600 *,
+html.light .bg-gradient-to-b.from-purple-700 .text-white,
+html.light .bg-gradient-to-b.from-purple-700 .text-zinc-100,
+html.light .bg-gradient-to-b.from-purple-700 .text-zinc-200,
+html.light .bg-gradient-to-b.from-purple-700 .text-zinc-300,
+html.light .bg-gradient-to-b.from-purple-700 .text-purple-200\/90,
+html.light .bg-gradient-to-b.from-purple-700 .text-purple-300,
+html.light .bg-gradient-to-b.from-purple-700 .bg-black\/45,
+html.light .bg-gradient-to-b.from-purple-700 .bg-black\/40,
+html.light .bg-gradient-to-b.from-purple-700 .bg-black\/35,
+html.light .aspect-square .text-white,
+html.light .bg-zinc-950.text-emerald-300,
+html.light .bg-zinc-950\/85.text-emerald-300 {
+  color: #ffffff !important;
+}
+
+html.light .bg-gradient-to-b.from-purple-700 .bg-black\/45,
+html.light .bg-gradient-to-b.from-purple-700 .bg-black\/40,
+html.light .bg-gradient-to-b.from-purple-700 .bg-black\/35,
+html.light .bg-gradient-to-b.from-purple-700 .bg-black\/50 {
+  background-color: rgba(15, 10, 35, 0.35) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+html.light .bg-gradient-to-b.from-purple-700 .bg-purple-600 {
+  background-color: #7c3aed !important;
+}
+
+html.light .bg-zinc-950.text-emerald-300,
+html.light .bg-zinc-950\/85.text-emerald-300 {
+  background-color: #09090b !important;
+  color: #6ee7b7 !important;
+}
+
+/* Status, Selected States & Accent Chips in Light Mode */
+html.light .bg-purple-950,
+html.light .bg-purple-950\/90,
+html.light .bg-purple-950\/80,
+html.light .bg-purple-950\/70,
+html.light .bg-purple-950\/60,
+html.light .bg-purple-950\/50,
+html.light .bg-purple-950\/40,
+html.light .bg-purple-950\/30,
+html.light .bg-purple-950\/20,
+html.light .bg-purple-950\/10,
+html.light .bg-purple-900\/60,
+html.light .bg-purple-900\/40,
+html.light .hover\:bg-purple-950\/10:hover {
+  background-color: rgba(124, 58, 237, 0.13) !important;
+}
+
+html.light .bg-indigo-950\/20,
+html.light .bg-indigo-950\/10,
+html.light .hover\:bg-indigo-950\/10:hover {
+  background-color: rgba(99, 102, 241, 0.12) !important;
+}
+
+html.light .bg-gradient-to-r.from-purple-900\/40.to-indigo-950\/40 {
+  background-image: linear-gradient(to right, rgba(124, 58, 237, 0.14), rgba(99, 102, 241, 0.12)) !important;
+}
+
+html.light .text-purple-100,
+html.light .text-purple-200,
+html.light .text-purple-300,
+html.light .text-purple-300\/80,
+html.light .text-purple-400 {
+  color: #5b21b6 !important;
+}
+
+html.light .text-indigo-100,
+html.light .text-indigo-200,
+html.light .text-indigo-300,
+html.light .text-indigo-400 {
+  color: #3730a3 !important;
+}
+
+html.light .bg-emerald-950\/80,
+html.light .bg-emerald-950\/60,
+html.light .bg-emerald-950\/40,
+html.light .bg-emerald-950\/30,
+html.light .bg-emerald-900\/60,
+html.light .hover\:bg-emerald-950\/80:hover {
+  background-color: #dcfce7 !important;
+}
+
+html.light .text-emerald-100,
+html.light .text-emerald-200,
+html.light .text-emerald-300,
+html.light .text-emerald-400,
+html.light .text-emerald-400\/80 {
+  color: #047857 !important;
+}
+
+html.light .bg-amber-950\/80,
+html.light .bg-amber-500\/15 {
+  background-color: #fef3c7 !important;
+}
+
+html.light .text-amber-100,
+html.light .text-amber-200,
+html.light .text-amber-300,
+html.light .text-amber-300\/90,
+html.light .text-amber-400 {
+  color: #b45309 !important;
+}
+
+html.light .bg-rose-950\/90,
+html.light .bg-rose-950\/80,
+html.light .bg-rose-950\/60,
+html.light .bg-rose-950\/40,
+html.light .bg-rose-950\/30,
+html.light .hover\:bg-rose-950\/90:hover,
+html.light .hover\:bg-rose-950\/60:hover,
+html.light .hover\:bg-rose-950\/40:hover {
+  background-color: #ffe4e6 !important;
+}
+
+html.light .text-rose-100,
+html.light .text-rose-200,
+html.light .text-rose-300,
+html.light .text-rose-400 {
+  color: #be123c !important;
+}
+
+html.light .text-cyan-100,
+html.light .text-cyan-200,
+html.light .text-cyan-300,
+html.light .text-cyan-400 {
+  color: #0e7490 !important;
+}
+
+/* Protect scheduled pastel block text & icons inside ScheduleSettings */
+html.light .text-zinc-950 {
+  color: #09090b !important;
+}
+
+/* Native date/time inputs in light mode */
+html.light input[type="date"],
+html.light input[type="time"] {
+  color-scheme: light !important;
+}
+
+/* Animations */
 @keyframes spinSlow {
   from {
     transform: rotate(0deg);

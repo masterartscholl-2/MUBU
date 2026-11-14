@@ -1,0 +1,210 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default-Deny Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'masterartscholl@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Validation Blueprint: UploadedTrack
+    function isValidUploadedTrack(data) {
+      return data.keys().hasAll([
+        'id', 'title', 'artist', 'duration', 'audioUrl', 'coverUrl',
+        'audioChunkCount', 'coverChunkCount', 'genre', 'mood', 'sectors',
+        'bpm', 'price', 'isCommercialCleared', 'playsCount', 'releaseDate',
+        'tags', 'synthPreset', 'targetPlaylistIds', 'ownerUid', 'createdAt', 'updatedAt'
+      ]) && data.keys().hasOnly([
+        'id', 'title', 'artist', 'duration', 'audioUrl', 'coverUrl',
+        'audioChunkCount', 'coverChunkCount', 'genre', 'mood', 'sectors',
+        'bpm', 'price', 'isCommercialCleared', 'playsCount', 'releaseDate',
+        'tags', 'synthPreset', 'targetPlaylistIds', 'ownerUid', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+      data.artist is string && data.artist.size() >= 1 && data.artist.size() <= 200 &&
+      data.duration is number && data.duration >= 0 && data.duration <= 86400 &&
+      data.audioUrl is string && data.audioUrl.size() >= 1 && data.audioUrl.size() <= 2000 &&
+      data.coverUrl is string && data.coverUrl.size() >= 1 && data.coverUrl.size() <= 250000 &&
+      data.audioChunkCount is int && data.audioChunkCount >= 0 && data.audioChunkCount <= 200 &&
+      data.coverChunkCount is int && data.coverChunkCount >= 0 && data.coverChunkCount <= 50 &&
+      data.genre is string && data.genre.size() >= 1 && data.genre.size() <= 100 &&
+      data.mood is string && data.mood.size() >= 1 && data.mood.size() <= 100 &&
+      data.sectors is list && data.sectors.size() <= 30 && (data.sectors.size() == 0 || data.sectors[0] is string) &&
+      data.bpm is number && data.bpm >= 30 && data.bpm <= 300 &&
+      data.price is number && data.price >= 0 && data.price <= 100000 &&
+      data.isCommercialCleared is bool &&
+      data.playsCount is int && data.playsCount >= 0 && data.playsCount <= 100000000 &&
+      data.releaseDate is string && data.releaseDate.size() >= 1 && data.releaseDate.size() <= 32 &&
+      data.tags is list && data.tags.size() <= 30 && (data.tags.size() == 0 || data.tags[0] is string) &&
+      data.synthPreset is string && data.synthPreset.size() >= 1 && data.synthPreset.size() <= 32 &&
+      data.synthPreset in ['chill', 'lofi', 'ambient', 'house', 'jazz', 'bossa'] &&
+      data.targetPlaylistIds is list && data.targetPlaylistIds.size() <= 50 &&
+      (data.targetPlaylistIds.size() == 0 || data.targetPlaylistIds[0] is string) &&
+      isValidId(data.ownerUid) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: MediaChunk
+    function isValidMediaChunk(data) {
+      return data.keys().hasAll(['kind', 'index', 'totalChunks', 'data', 'ownerUid', 'createdAt']) &&
+        data.keys().hasOnly(['kind', 'index', 'totalChunks', 'data', 'ownerUid', 'createdAt']) &&
+        data.kind is string && data.kind.size() >= 1 && data.kind.size() <= 16 && data.kind in ['audio', 'cover'] &&
+        data.index is int && data.index >= 0 && data.index < 200 &&
+        data.totalChunks is int && data.totalChunks >= 1 && data.totalChunks <= 200 &&
+        data.index < data.totalChunks &&
+        data.data is string && data.data.size() >= 1 && data.data.size() <= 600000 &&
+        isValidId(data.ownerUid) &&
+        data.createdAt is timestamp;
+    }
+
+    // Validation Blueprint: DeletedTrackTombstone
+    function isValidDeletedTrack(data) {
+      return data.keys().hasAll(['trackId', 'isDeleted', 'deletedBy', 'deletedAt']) &&
+        data.keys().hasOnly(['trackId', 'isDeleted', 'deletedBy', 'deletedAt']) &&
+        isValidId(data.trackId) &&
+        data.isDeleted is bool && data.isDeleted == true &&
+        isValidId(data.deletedBy) &&
+        data.deletedAt is timestamp;
+    }
+
+    // Validation Blueprint: AdminUser
+    function isValidAdminUser(data) {
+      return data.keys().hasAll(['uid', 'role', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'role', 'createdAt']) &&
+        isValidId(data.uid) &&
+        data.role is string && data.role.size() >= 1 && data.role.size() <= 16 && data.role == 'admin' &&
+        data.createdAt is timestamp;
+    }
+
+    // Collection: uploadedTracks (PII-free public catalog; admin-only mutations)
+    match /uploadedTracks/{trackId} {
+      allow get: if isValidId(trackId);
+      allow list: if existing().isCommercialCleared == true;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(trackId) &&
+        isValidUploadedTrack(incoming()) &&
+        incoming().id == trackId &&
+        incoming().ownerUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() &&
+        isValidId(trackId) &&
+        isValidUploadedTrack(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'artist', 'duration', 'audioUrl', 'coverUrl',
+          'audioChunkCount', 'coverChunkCount', 'genre', 'mood',
+          'sectors', 'bpm', 'tags', 'synthPreset', 'targetPlaylistIds', 'updatedAt'
+        ]);
+
+      allow delete: if isVerifiedUser() && isValidId(trackId) && isAdmin();
+
+      // Subcollection: chunks (Master Gate bound to parent trackId)
+      match /chunks/{chunkId} {
+        allow get: if isValidId(trackId) && isValidId(chunkId);
+        allow list: if existing().kind in ['audio', 'cover'];
+
+        allow create: if isVerifiedUser() &&
+          isValidId(trackId) &&
+          isValidId(chunkId) &&
+          isValidMediaChunk(incoming()) &&
+          incoming().ownerUid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          isAdmin() &&
+          (exists(/databases/$(database)/documents/uploadedTracks/$(trackId)) ||
+           existsAfter(/databases/$(database)/documents/uploadedTracks/$(trackId)));
+
+        allow update: if isVerifiedUser() &&
+          isValidId(trackId) &&
+          isValidId(chunkId) &&
+          isValidMediaChunk(incoming()) &&
+          incoming().kind == existing().kind &&
+          incoming().ownerUid == existing().ownerUid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['data', 'index', 'totalChunks']) &&
+          isAdmin() &&
+          exists(/databases/$(database)/documents/uploadedTracks/$(trackId));
+
+        allow delete: if isVerifiedUser() &&
+          isValidId(trackId) &&
+          isValidId(chunkId) &&
+          isAdmin() &&
+          exists(/databases/$(database)/documents/uploadedTracks/$(trackId));
+      }
+    }
+
+    // Collection: deletedTracks (Permanent deletion tombstones; admin-only mutations)
+    match /deletedTracks/{trackId} {
+      allow get: if isValidId(trackId);
+      allow list: if existing().isDeleted == true;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(trackId) &&
+        isValidDeletedTrack(incoming()) &&
+        incoming().trackId == trackId &&
+        incoming().deletedBy == request.auth.uid &&
+        incoming().deletedAt == request.time &&
+        isAdmin();
+
+      allow update: if false;
+
+      allow delete: if isVerifiedUser() && isValidId(trackId) && isAdmin();
+    }
+
+    // Collection: admins (Restricted admin registry)
+    match /admins/{adminId} {
+      allow get: if isVerifiedUser() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
+      allow list: if isVerifiedUser() && existing().uid == request.auth.uid;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(adminId) &&
+        isValidAdminUser(incoming()) &&
+        incoming().uid == adminId &&
+        incoming().createdAt == request.time &&
+        request.auth.token.email == 'masterartscholl@gmail.com';
+
+      allow update: if false;
+
+      allow delete: if isVerifiedUser() &&
+        isValidId(adminId) &&
+        request.auth.token.email == 'masterartscholl@gmail.com';
+    }
+  }
+}

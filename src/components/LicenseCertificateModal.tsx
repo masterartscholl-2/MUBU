@@ -68,7 +68,7 @@ export const LicenseCertificateModal: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-2xl font-black text-white tracking-tight font-sans print:text-black">
-                    müzikbank
+                    Staff
                   </span>
                   <div className="w-2 h-2 rounded-full bg-purple-500" />
                 </div>
@@ -124,7 +124,7 @@ export const LicenseCertificateModal: React.FC = () => {
             {/* Legal text */}
             <div className="text-[11px] text-zinc-400 leading-relaxed space-y-2.5 my-6 text-justify border-y border-zinc-900 py-4 print:text-zinc-800 print:border-zinc-300">
               <p>
-                İşbu belge, yukarıda unvanı belirtilen ticari mekanın, söz konusu müzik eserini işletme içerisinde (kafe, restoran, otel, mağaza vb.) ticari fon müziği olarak yayınlama hakkına sahip olduğunu ve ilgili eserin <strong>tüm umuma iletim haklarının doğrudan müzikbank Platformu tarafından devralındığını</strong> tevsik eder.
+                İşbu belge, yukarıda unvanı belirtilen ticari mekanın, söz konusu müzik eserini işletme içerisinde (kafe, restoran, otel, mağaza vb.) ticari fon müziği olarak yayınlama hakkına sahip olduğunu ve ilgili eserin <strong>tüm umuma iletim haklarının doğrudan Staff Platformu tarafından devralındığını</strong> tevsik eder.
               </p>
               <p>
                 Eser sahipleri ve yapımcılar, MESAM, MSG, MÜ-YAP, MÜYOBİR gibi meslek birliklerine üye olmaksızın veya haklarını bağımsız olarak yöneterek doğrudan lisanslamıştır. Bu sebeple <strong>işletmeden meslek birliklerince ilave mekan telif ücreti talep edilemez</strong>.
@@ -150,7 +150,7 @@ export const LicenseCertificateModal: React.FC = () => {
               <div className="text-right">
                 <div className="inline-block p-2 rounded-xl border border-purple-500/50 bg-purple-950/20 text-center print:border-black print:bg-transparent">
                   <div className="text-[10px] font-bold text-purple-300 print:text-black uppercase">
-                    müzikbank Lisanslama Kuruluşu
+                    Staff Lisanslama Kuruluşu
                   </div>
                   <div className="text-[9px] text-zinc-500 print:text-zinc-600">
                     Elektronik Güvenli İmzalı & Onaylı

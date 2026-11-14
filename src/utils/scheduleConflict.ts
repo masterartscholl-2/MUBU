@@ -46,7 +46,7 @@ export function resolveScheduleConflicts(
   const candidate: ScheduledPlaylist = { ...target };
   let cStart = candidate.startHour * 60 + candidate.startMinute;
   const origCStart = cStart;
-  let cDurMins = Math.max(5, Math.round(candidate.durationHours * 60));
+  let cDurMins = Math.max(1, Math.round(candidate.durationHours * 60));
   let cEnd = Math.min(24 * 60, cStart + cDurMins);
   const origCEnd = cEnd;
 
@@ -63,7 +63,7 @@ export function resolveScheduleConflicts(
   for (const { idx } of sameDayIndices) {
     const other = others[idx];
     const oStart = other.startHour * 60 + other.startMinute;
-    const oDurMins = Math.max(5, Math.round(other.durationHours * 60));
+    const oDurMins = Math.max(1, Math.round(other.durationHours * 60));
     const oEnd = Math.min(24 * 60, oStart + oDurMins);
 
     // Check interval overlap: [oStart, oEnd) vs [cStart, cEnd)
@@ -74,7 +74,7 @@ export function resolveScheduleConflicts(
     if (oStart < cStart && oEnd > cStart) {
       // Existing earlier playlist extends into the new playlist's start time -> shorten existing earlier playlist
       const shortenedMins = oEnd - cStart;
-      const newODurMins = Math.max(5, cStart - oStart);
+      const newODurMins = Math.max(1, cStart - oStart);
       others[idx] = {
         ...other,
         durationHours: Number((newODurMins / 60).toFixed(4))
@@ -89,14 +89,14 @@ export function resolveScheduleConflicts(
     } else if (cStart < oStart && cEnd > oStart) {
       // Candidate starts earlier and extends into an existing later playlist -> shorten candidate
       cEnd = oStart;
-      cDurMins = Math.max(5, cEnd - cStart);
+      cDurMins = Math.max(1, cEnd - cStart);
       candidate.durationHours = Number((cDurMins / 60).toFixed(4));
       candidateWasShortened = true;
     } else if (oStart === cStart) {
       if (cEnd < oEnd) {
         // Candidate is shorter and starts at same time -> shift existing start to cEnd
         const trimmedMins = cEnd - oStart;
-        const newODurMins = Math.max(5, oEnd - cEnd);
+        const newODurMins = Math.max(1, oEnd - cEnd);
         others[idx] = {
           ...other,
           startHour: Math.floor(cEnd / 60) % 24,
@@ -120,16 +120,16 @@ export function resolveScheduleConflicts(
         for (const nextCheck of sameDayIndices) {
           const nxt = others[nextCheck.idx];
           const nStart = nxt.startHour * 60 + nxt.startMinute;
-          const nEnd = Math.min(24 * 60, nStart + Math.max(5, Math.round(nxt.durationHours * 60)));
+          const nEnd = Math.min(24 * 60, nStart + Math.max(1, Math.round(nxt.durationHours * 60)));
           if (nStart < nextStart + durationToPreserve && nEnd > nextStart) {
             nextStart = nEnd;
           }
         }
 
-        if (nextStart < 24 * 60 - 5) {
+        if (nextStart < 24 * 60 - 1) {
           cStart = nextStart;
           cEnd = Math.min(24 * 60, cStart + durationToPreserve);
-          cDurMins = Math.max(5, cEnd - cStart);
+          cDurMins = Math.max(1, cEnd - cStart);
           candidate.startHour = Math.floor(cStart / 60);
           candidate.startMinute = cStart % 60;
           candidate.durationHours = Number((cDurMins / 60).toFixed(4));

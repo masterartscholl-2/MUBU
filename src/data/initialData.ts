@@ -1,4 +1,4 @@
-import { Track, Playlist, RadioStation, UserProfile, GenreCategory, VenueSector } from '../types';
+import { Track, Playlist, RadioStation, UserProfile, GenreCategory, VenueSector, ManagedVenue } from '../types';
 
 export const INITIAL_MOODS: string[] = [
   'Sakin & Rahatlatıcı',
@@ -250,7 +250,7 @@ export const INITIAL_PLAYLISTS: Playlist[] = [
     coverUrl: 'https://images.unsplash.com/photo-1541432901042-2d8bd64b4a9b?q=80&w=600&auto=format&fit=crop',
     durationText: '11s 41dk',
     trackIds: ['trk-1', 'trk-4', 'trk-8'],
-    curator: 'müzikbank Müzik Direktörlüğü',
+    curator: 'Staff Müzik Direktörlüğü',
     isEditorial: true,
     type: 'playlist'
   },
@@ -272,7 +272,7 @@ export const INITIAL_PLAYLISTS: Playlist[] = [
     coverUrl: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?q=80&w=600&auto=format&fit=crop',
     durationText: '17s 40dk',
     trackIds: ['trk-7', 'trk-2', 'trk-3', 'trk-12'],
-    curator: 'müzikbank Editör Seçimi',
+    curator: 'Staff Editör Seçimi',
     isEditorial: true,
     type: 'playlist'
   },
@@ -283,7 +283,7 @@ export const INITIAL_PLAYLISTS: Playlist[] = [
     coverUrl: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=600&auto=format&fit=crop',
     durationText: '20s 04dk',
     trackIds: ['trk-1', 'trk-8', 'trk-2'],
-    curator: 'müzikbank Chill Club',
+    curator: 'Staff Chill Club',
     isEditorial: true,
     type: 'playlist'
   },
@@ -554,7 +554,7 @@ export const VENUE_SECTORS = [
 export const INITIAL_RADIOS: RadioStation[] = [
   {
     id: 'rad-1',
-    name: 'müzikbank Cafe FM',
+    name: 'Staff Cafe FM',
     badgeTitle: 'CAFE FM',
     description: '7/24 Kesintisiz üçüncü nesil kafe ve barista fon yayını.',
     coverUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=600&auto=format&fit=crop',
@@ -564,7 +564,7 @@ export const INITIAL_RADIOS: RadioStation[] = [
   },
   {
     id: 'rad-2',
-    name: 'müzikbank Lounge & Sunset Radio',
+    name: 'Staff Lounge & Sunset Radio',
     badgeTitle: 'LOUNGE & SUNSET',
     description: 'Kokteyl barlar, rooftop ve butik oteller için canlı akış.',
     coverUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop',
@@ -574,7 +574,7 @@ export const INITIAL_RADIOS: RadioStation[] = [
   },
   {
     id: 'rad-3',
-    name: 'müzikbank Jazz & Wine Radio',
+    name: 'Staff Jazz & Wine Radio',
     badgeTitle: 'JAZZ & WINE',
     description: 'Şarap evleri, şık bistrolar ve akşam yemekleri için caz akışı.',
     coverUrl: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?q=80&w=600&auto=format&fit=crop',
@@ -584,7 +584,7 @@ export const INITIAL_RADIOS: RadioStation[] = [
   },
   {
     id: 'rad-4',
-    name: 'müzikbank Zen & Spa Radio',
+    name: 'Staff Zen & Spa Radio',
     badgeTitle: 'ZEN & SPA',
     description: 'Zihinsel dinginlik, yoga ve spa merkezleri için kesintisiz frekans.',
     coverUrl: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?q=80&w=600&auto=format&fit=crop',
@@ -594,7 +594,7 @@ export const INITIAL_RADIOS: RadioStation[] = [
   },
   {
     id: 'rad-5',
-    name: 'müzikbank Electro Club FM',
+    name: 'Staff Electro Club FM',
     badgeTitle: 'ELECTRO CLUB',
     description: 'Enerjik kulüp ve modern butik mekanlar için canlı nu-disco & house yayını.',
     coverUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop',
@@ -604,7 +604,7 @@ export const INITIAL_RADIOS: RadioStation[] = [
   },
   {
     id: 'rad-6',
-    name: 'müzikbank Bossa Dinner FM',
+    name: 'Staff Bossa Dinner FM',
     badgeTitle: 'BOSSA DINNER',
     description: 'Romantik akşam yemekleri ve şık restoranlar için Brezilya esintili caz.',
     coverUrl: 'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?q=80&w=600&auto=format&fit=crop',
@@ -614,7 +614,7 @@ export const INITIAL_RADIOS: RadioStation[] = [
   },
   {
     id: 'rad-7',
-    name: 'müzikbank Vintage Blues Radio',
+    name: 'Staff Vintage Blues Radio',
     badgeTitle: 'VINTAGE BLUES',
     description: '1950lerden günümüze nostaljik blues, retro soul ve akustik tınılar.',
     coverUrl: 'https://images.unsplash.com/photo-1525201548942-d8732f6617a0?q=80&w=600&auto=format&fit=crop',
@@ -624,7 +624,7 @@ export const INITIAL_RADIOS: RadioStation[] = [
   },
   {
     id: 'rad-8',
-    name: 'müzikbank Focus & Work Station',
+    name: 'Staff Focus & Work Station',
     badgeTitle: 'FOCUS & WORK',
     description: 'Ofisler ve ortak çalışma alanları için zihin açıcı enstrümantal fon akışı.',
     coverUrl: 'https://images.unsplash.com/photo-1497215728101-856f4ea42174?q=80&w=600&auto=format&fit=crop',
@@ -723,3 +723,132 @@ export const DEFAULT_USER: UserProfile = {
     validUntil: '2026-12-31'
   }
 };
+
+export const INITIAL_MANAGED_VENUES: ManagedVenue[] = [
+  {
+    id: 'mv-1',
+    venueName: 'Crystal Cafe & Bistro - Nişantaşı (Merkez)',
+    companyName: 'Crystal Mekan İşletmeciliği A.Ş.',
+    authorizedPerson: 'Ahmet Yılmaz',
+    email: 'kurumsal@crystalcafe.com.tr',
+    phone: '+90 (212) 234 56 78',
+    taxNumber: '3498219012',
+    taxOffice: 'Mecidiyeköy V.D.',
+    sector: 'Kafe & Kahve Dükkanı',
+    city: 'İstanbul',
+    district: 'Şişli',
+    address: 'Valikonağı Cad. No: 42/B',
+    sqMeters: 140,
+    packageName: 'Kafe & Butik Mekan',
+    packagePrice: 690,
+    billingCycle: 'Aylık',
+    purchasedAt: '2026-10-15',
+    expiresAt: '2026-12-31',
+    autoRenew: true,
+    paymentStatus: 'Ödendi',
+    licenseNo: 'MZB-2025-8821-TR',
+    assignedPlaylistId: 'pl-3',
+    notes: 'Merkez şube, otomatik yenileme aktif.'
+  },
+  {
+    id: 'mv-2',
+    venueName: 'Crystal Lounge & Terrace - Kadıköy',
+    companyName: 'Crystal Mekan İşletmeciliği A.Ş.',
+    authorizedPerson: 'Ahmet Yılmaz',
+    email: 'kadikoy@crystalcafe.com.tr',
+    phone: '+90 (216) 348 12 90',
+    taxNumber: '3498219012',
+    taxOffice: 'Mecidiyeköy V.D.',
+    sector: 'Otel & Lounge Bar',
+    city: 'İstanbul',
+    district: 'Kadıköy',
+    address: 'Moda Cad. No: 18 Kat: 4',
+    sqMeters: 220,
+    packageName: 'Restoran & Lounge Bar',
+    packagePrice: 1190,
+    billingCycle: 'Aylık',
+    purchasedAt: '2026-11-01',
+    expiresAt: '2026-12-01',
+    autoRenew: true,
+    paymentStatus: 'Ödendi',
+    licenseNo: 'MZB-2025-9104-TR',
+    assignedPlaylistId: 'pl-1',
+    notes: 'Teras ve salon bölümü için kayıpsız yayın.'
+  },
+  {
+    id: 'mv-3',
+    venueName: 'Crystal Coffee Lab - Bebek',
+    companyName: 'Crystal Mekan İşletmeciliği A.Ş.',
+    authorizedPerson: 'Elif Demir',
+    email: 'bebek@crystalcafe.com.tr',
+    phone: '+90 (212) 263 44 10',
+    taxNumber: '3498219012',
+    taxOffice: 'Mecidiyeköy V.D.',
+    sector: 'Kafe & Kahve Dükkanı',
+    city: 'İstanbul',
+    district: 'Beşiktaş',
+    address: 'Cevdetpaşa Cad. No: 76',
+    sqMeters: 85,
+    packageName: 'Kafe & Butik Mekan',
+    packagePrice: 690,
+    billingCycle: 'Aylık',
+    purchasedAt: '2026-10-20',
+    expiresAt: '2026-11-20',
+    autoRenew: false,
+    paymentStatus: 'Ödendi',
+    licenseNo: 'MZB-2025-9442-TR',
+    assignedPlaylistId: 'pl-4',
+    notes: 'Yenileme tarihi yaklaşıyor, işletme ile iletişime geçilecek.'
+  },
+  {
+    id: 'mv-4',
+    venueName: 'Vela Fine Dining & Rooftop - Bodrum',
+    companyName: 'Vela Turizm ve Restoran İşl. Ltd. Şti.',
+    authorizedPerson: 'Murat Kaya',
+    email: 'finans@velabodrum.com',
+    phone: '+90 (252) 316 88 20',
+    taxNumber: '9240518734',
+    taxOffice: 'Bodrum V.D.',
+    sector: 'Restoran & Fine Dining',
+    city: 'Muğla',
+    district: 'Bodrum',
+    address: 'Neyzen Tevfik Cad. Marina Karşısı No: 112',
+    sqMeters: 380,
+    packageName: 'Zincir & Kurumsal Şube',
+    packagePrice: 18500,
+    billingCycle: 'Yıllık',
+    purchasedAt: '2026-05-10',
+    expiresAt: '2027-05-10',
+    autoRenew: true,
+    paymentStatus: 'Ödendi',
+    licenseNo: 'MZB-2026-3109-TR',
+    assignedPlaylistId: 'pl-2',
+    notes: 'Yıllık peşin kurumsal sözleşme.'
+  },
+  {
+    id: 'mv-5',
+    venueName: 'Aura Wellness & Spa - Çankaya',
+    companyName: 'Aura Sağlık ve Güzellik Hizm. A.Ş.',
+    authorizedPerson: 'Selin Arslan',
+    email: 'info@auraspa.com.tr',
+    phone: '+90 (312) 441 72 15',
+    taxNumber: '1084729301',
+    taxOffice: 'Çankaya V.D.',
+    sector: 'Spa & Güzellik Merkezi',
+    city: 'Ankara',
+    district: 'Çankaya',
+    address: 'Tunalı Hilmi Cad. Bülten Sok. No: 9',
+    sqMeters: 310,
+    packageName: 'Kafe & Butik Mekan',
+    packagePrice: 690,
+    billingCycle: 'Aylık',
+    purchasedAt: '2026-09-25',
+    expiresAt: '2026-10-25',
+    autoRenew: false,
+    paymentStatus: 'Beklemede',
+    licenseNo: 'MZB-2026-4418-TR',
+    assignedPlaylistId: 'pl-5',
+    notes: 'Paket süresi doldu, yeni dönem faturası bekleniyor.'
+  }
+];
+

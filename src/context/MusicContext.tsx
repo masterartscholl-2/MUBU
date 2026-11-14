@@ -1,10 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { Track, Playlist, RadioStation, UserProfile, LicenseRecord, CartItem, VenueLocation, GenreCategory, VenueSector, ScheduledPlaylist } from '../types';
-import { INITIAL_TRACKS, INITIAL_PLAYLISTS, INITIAL_RADIOS, DEFAULT_USER, GENRE_CATEGORIES, VENUE_SECTORS, INITIAL_MOODS } from '../data/initialData';
+import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
+import { Track, Playlist, RadioStation, UserProfile, LicenseRecord, CartItem, VenueLocation, GenreCategory, VenueSector, ScheduledPlaylist, ManagedVenue } from '../types';
+import { INITIAL_TRACKS, INITIAL_PLAYLISTS, INITIAL_RADIOS, DEFAULT_USER, GENRE_CATEGORIES, VENUE_SECTORS, INITIAL_MOODS, INITIAL_MANAGED_VENUES } from '../data/initialData';
 import { audioEngine } from '../utils/audioEngine';
 import { findMatchingPlaylistIds, getTracksForPlaylist } from '../utils/playlistMatcher';
 import { saveTrackMedia, getTrackMedia, deleteTrackMedia } from '../utils/audioStorage';
 import { resolveScheduleConflicts, ScheduleConflictNotice } from '../utils/scheduleConflict';
+import { auth, googleProvider, ADMIN_EMAIL } from '../firebase';
+import {
+  saveTrackToCloud,
+  deleteTrackFromCloud,
+  loadCloudCatalogState,
+  resetCloudCatalog,
+} from '../utils/firebaseTrackStore';
 
 interface MusicContextType {
   tracks: Track[];
@@ -147,28 +155,73 @@ interface MusicContextType {
   addScheduledPlaylist: (item: Omit<ScheduledPlaylist, 'id'>) => ScheduledPlaylist;
   updateScheduledPlaylist: (id: string, updates: Partial<ScheduledPlaylist>) => void;
   deleteScheduledPlaylist: (id: string) => void;
-  activeAutoPlayNotice: { scheduleId: string; playlistTitle: string; timeLabel: string } | null;
+  activeAutoPlayNotice: { scheduleId: string; playlistTitle: string; timeLabel: string; status: 'started' | 'ended' } | null;
   dismissAutoPlayNotice: () => void;
+  activeScheduledId: string | null;
   activeScheduleDrag: { kind: 'new-playlist' | 'move-schedule'; playlistId?: string; scheduleId?: string; label: string } | null;
   setActiveScheduleDrag: React.Dispatch<React.SetStateAction<{ kind: 'new-playlist' | 'move-schedule'; playlistId?: string; scheduleId?: string; label: string } | null>>;
   quickSchedulePlaylistId: string | null;
   setQuickSchedulePlaylistId: React.Dispatch<React.SetStateAction<string | null>>;
   scheduleConflictNotice: ScheduleConflictNotice | null;
   dismissScheduleConflictNotice: () => void;
+
+  // Theme (Dark / Light)
+  theme: 'dark' | 'light';
+  setTheme: React.Dispatch<React.SetStateAction<'dark' | 'light'>>;
+  toggleTheme: () => void;
+
+  // Admin Venue & Package Management
+  managedVenues: ManagedVenue[];
+  addManagedVenue: (venue: Omit<ManagedVenue, 'id' | 'licenseNo'> & { licenseNo?: string }) => ManagedVenue;
+  updateManagedVenue: (id: string, updates: Partial<ManagedVenue>) => void;
+  deleteManagedVenue: (id: string) => void;
+  renewManagedVenue: (id: string, cycle: 'Aylık' | 'Yıllık') => void;
+
+  // Firebase Cloud Persistence & Admin Auth
+  firebaseUser: User | null;
+  isFirebaseAdmin: boolean;
+  isAuthReady: boolean;
+  isCloudSyncing: boolean;
+  cloudSyncStatus: string | null;
+  cloudSyncError: string | null;
+  signInWithGoogleAdmin: () => Promise<boolean>;
+  signOutFirebaseAdmin: () => Promise<void>;
+  syncTrackToCloudAsync: (track: Track, targetPlaylistIds?: string[]) => Promise<boolean>;
 }
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
 
+const INITIAL_TRACK_IDS = new Set(INITIAL_TRACKS.map(t => t.id));
+
+const readLocalDeletedIds = (): string[] => {
+  try {
+    const saved = localStorage.getItem('muzikbank_deleted_tracks');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed.map(String);
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  return [];
+};
+
 export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [deletedTrackIds, setDeletedTrackIds] = useState<string[]>(() => readLocalDeletedIds());
+
   // Persistent data states
   const [tracks, setTracks] = useState<Track[]>(() => {
+    const deletedSet = new Set(readLocalDeletedIds());
     try {
       const saved = localStorage.getItem('muzikbank_tracks') || localStorage.getItem('muzibu_tracks');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Track[];
+        return parsed.filter(t => !deletedSet.has(t.id));
+      }
     } catch (e) {
       console.error(e);
     }
-    return INITIAL_TRACKS;
+    return INITIAL_TRACKS.filter(t => !deletedSet.has(t.id));
   });
 
   const [playlists, setPlaylists] = useState<Playlist[]>(() => {
@@ -238,6 +291,61 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return DEFAULT_USER;
   });
 
+  // Theme state (Dark / Light)
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      const saved = localStorage.getItem('muzikbank_theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch (e) {
+      console.error(e);
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('light');
+      root.classList.remove('dark');
+      root.style.colorScheme = 'light';
+    } else {
+      root.classList.add('dark');
+      root.classList.remove('light');
+      root.style.colorScheme = 'dark';
+    }
+    try {
+      localStorage.setItem('muzikbank_theme', theme);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
+
+  // Admin Managed Venues & Package Records
+  const [managedVenues, setManagedVenues] = useState<ManagedVenue[]>(() => {
+    try {
+      const saved = localStorage.getItem('muzikbank_managed_venues');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_MANAGED_VENUES;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('muzikbank_managed_venues', JSON.stringify(managedVenues));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [managedVenues]);
+
   // Audio Playback states
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -289,7 +397,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     scheduleId: string;
     playlistTitle: string;
     timeLabel: string;
+    status: 'started' | 'ended';
   } | null>(null);
+  const [activeScheduledId, setActiveScheduledId] = useState<string | null>(null);
 
   const [activeScheduleDrag, setActiveScheduleDrag] = useState<{
     kind: 'new-playlist' | 'move-schedule';
@@ -301,33 +411,186 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [quickSchedulePlaylistId, setQuickSchedulePlaylistId] = useState<string | null>(null);
   const [scheduleConflictNotice, setScheduleConflictNotice] = useState<ScheduleConflictNotice | null>(null);
 
-  // Restore any persistent media from IndexedDB on startup
+  // Firebase Auth & Cloud Persistence states
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
+  const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<string | null>(null);
+  const [cloudSyncError, setCloudSyncError] = useState<string | null>(null);
+
+  const isFirebaseAdmin = Boolean(
+    firebaseUser && firebaseUser.emailVerified && firebaseUser.email === ADMIN_EMAIL
+  );
+
+  // Persist deletedTrackIds locally as well
+  useEffect(() => {
+    try {
+      localStorage.setItem('muzikbank_deleted_tracks', JSON.stringify(deletedTrackIds));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [deletedTrackIds]);
+
+  // Listen to Firebase Auth state changes
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (currentUser) => {
+      setFirebaseUser(currentUser);
+      setIsAuthReady(true);
+      if (currentUser && (!currentUser.emailVerified || currentUser.email !== ADMIN_EMAIL)) {
+        setCloudSyncError(`Bu Google hesabı (${currentUser.email || 'bilinmiyor'}) yönetici yetkisine sahip değil. Kalıcı bulut kaydı için ${ADMIN_EMAIL} ile giriş yapın.`);
+      } else {
+        setCloudSyncError(null);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const signInWithGoogleAdmin = useCallback(async (): Promise<boolean> => {
+    setCloudSyncError(null);
+    try {
+      const cred = await signInWithPopup(auth, googleProvider);
+      const u = cred.user;
+      if (u && u.emailVerified && u.email === ADMIN_EMAIL) {
+        setCloudSyncStatus('Bulut yönetici oturumu doğrulandı.');
+        return true;
+      }
+      setCloudSyncError(`Yönetici yetkisi yalnızca ${ADMIN_EMAIL} hesabı içindir.`);
+      return false;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Google girişi başarısız oldu.';
+      setCloudSyncError(msg);
+      return false;
+    }
+  }, []);
+
+  const signOutFirebaseAdmin = useCallback(async (): Promise<void> => {
+    try {
+      await signOut(auth);
+      setCloudSyncStatus(null);
+      setCloudSyncError(null);
+    } catch (err) {
+      console.error('Sign out failed:', err);
+    }
+  }, []);
+
+  // Restore any persistent media from IndexedDB and hydrate cloud MP3 tracks + deletions on startup
   useEffect(() => {
     let isCancelled = false;
-    const restoreMedia = async () => {
+
+    const hydrateCatalog = async () => {
+      // Step 1: Restore local IndexedDB media
       try {
-        let hasChanges = false;
-        const restored = await Promise.all(
+        let hasLocalChanges = false;
+        const restoredLocal = await Promise.all(
           tracks.map(async (t) => {
             if (t.audioUrl?.startsWith('idb:')) {
               const media = await getTrackMedia(t.id);
               if (media?.audio) {
-                hasChanges = true;
+                hasLocalChanges = true;
                 return { ...t, audioUrl: media.audio, coverUrl: media.image || t.coverUrl };
               }
             }
             return t;
           })
         );
-        if (hasChanges && !isCancelled) {
-          setTracks(restored);
+        if (hasLocalChanges && !isCancelled) {
+          setTracks(restoredLocal);
         }
       } catch (err) {
         console.error('Failed to restore media from IndexedDB:', err);
       }
+
+      // Step 2: Hydrate persistent tracks and permanent deletions from Firestore
+      try {
+        setIsCloudSyncing(true);
+        const { uploadedTracks: cloudItems, deletedTrackIds: cloudDeletedIds } =
+          await loadCloudCatalogState();
+        if (isCancelled) return;
+
+        const mergedDeletedSet = new Set([...readLocalDeletedIds(), ...cloudDeletedIds]);
+        const mergedDeletedList = Array.from(mergedDeletedSet);
+        setDeletedTrackIds(mergedDeletedList);
+
+        // Clean local IndexedDB entries for permanently deleted tracks
+        cloudDeletedIds.forEach((delId) => {
+          deleteTrackMedia(delId).catch(console.error);
+        });
+
+        // Merge cloud tracks with existing tracks while excluding any deleted track IDs
+        setTracks((prevTracks) => {
+          const withoutDeleted = prevTracks.filter((t) => !mergedDeletedSet.has(t.id));
+          const map = new Map<string, Track>();
+          withoutDeleted.forEach((t) => map.set(t.id, t));
+
+          const newCloudTracks: Track[] = [];
+          cloudItems.forEach(({ track }) => {
+            if (mergedDeletedSet.has(track.id)) return;
+            if (map.has(track.id)) {
+              const existing = map.get(track.id)!;
+              map.set(track.id, {
+                ...existing,
+                ...track,
+                audioUrl:
+                  track.audioUrl && track.audioUrl !== 'chunked'
+                    ? track.audioUrl
+                    : existing.audioUrl,
+                coverUrl:
+                  track.coverUrl && track.coverUrl !== 'chunked'
+                    ? track.coverUrl
+                    : existing.coverUrl,
+              });
+            } else {
+              newCloudTracks.push(track);
+            }
+          });
+
+          const merged = [
+            ...newCloudTracks,
+            ...withoutDeleted.map((t) => map.get(t.id)!),
+          ];
+          return merged;
+        });
+
+        // Apply playlist memberships and remove deleted tracks from playlists
+        setPlaylists((prevPlaylists) =>
+          prevPlaylists.map((pl) => {
+            const filteredIds = pl.trackIds.filter((tid) => !mergedDeletedSet.has(tid));
+            const additions: string[] = [];
+
+            cloudItems.forEach(({ track, targetPlaylistIds }) => {
+              if (mergedDeletedSet.has(track.id)) return;
+              const autoIds = findMatchingPlaylistIds(track.genre, track.sectors, [pl]);
+              const shouldInclude =
+                targetPlaylistIds.includes(pl.id) || autoIds.includes(pl.id);
+              if (
+                shouldInclude &&
+                !filteredIds.includes(track.id) &&
+                !additions.includes(track.id)
+              ) {
+                additions.push(track.id);
+              }
+            });
+
+            return {
+              ...pl,
+              trackIds: [...additions, ...filteredIds],
+            };
+          })
+        );
+      } catch (err) {
+        console.error('Failed to hydrate catalog from Firebase:', err);
+      } finally {
+        if (!isCancelled) {
+          setIsCloudSyncing(false);
+        }
+      }
     };
-    restoreMedia();
-    return () => { isCancelled = true; };
+
+    void hydrateCatalog();
+    return () => {
+      isCancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Save changes to localStorage with quota protection
@@ -401,8 +664,31 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, [scheduledPlaylists]);
 
+  const activeScheduledSessionRef = useRef<{
+    scheduleId: string;
+    occurrenceDate: string;
+    playlistId: string;
+    playlistTitle: string;
+    startLabel: string;
+    endLabel: string;
+    endMs: number;
+  } | null>(null);
+
+  // Unlock browser audio context on any user interaction so scheduled playback starts with sound
+  useEffect(() => {
+    const handleUnlock = () => {
+      audioEngine.unlock();
+    };
+    window.addEventListener('pointerdown', handleUnlock, { passive: true });
+    window.addEventListener('keydown', handleUnlock, { passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', handleUnlock);
+      window.removeEventListener('keydown', handleUnlock);
+    };
+  }, []);
+
   // Audio Playback logic
-  const playTrack = useCallback((track: Track, queueContext?: Track[]) => {
+  const startTrackInternal = useCallback((track: Track, queueContext?: Track[]) => {
     setCurrentTrack(track);
     setIsPlaying(true);
     setCurrentTime(0);
@@ -433,6 +719,12 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tracks, queue]);
+
+  const playTrack = useCallback((track: Track, queueContext?: Track[]) => {
+    activeScheduledSessionRef.current = null;
+    setActiveScheduledId(null);
+    startTrackInternal(track, queueContext);
+  }, [startTrackInternal]);
 
   const handleTrackEnded = useCallback(() => {
     if (isRepeat) {
@@ -468,9 +760,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setQueueIndex(nextIdx);
     const nextTrk = queue[nextIdx];
     if (nextTrk) {
-      playTrack(nextTrk, queue);
+      startTrackInternal(nextTrk, queue);
     }
-  }, [queue, queueIndex, isShuffle, playTrack]);
+  }, [queue, queueIndex, isShuffle, startTrackInternal]);
 
   const prevTrack = useCallback(() => {
     if (!queue.length) return;
@@ -486,9 +778,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setQueueIndex(prevIdx);
     const prevTrk = queue[prevIdx];
     if (prevTrk) {
-      playTrack(prevTrk, queue);
+      startTrackInternal(prevTrk, queue);
     }
-  }, [queue, queueIndex, currentTime, playTrack]);
+  }, [queue, queueIndex, currentTime, startTrackInternal]);
 
   const togglePlay = useCallback(() => {
     if (!currentTrack) {
@@ -568,20 +860,29 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setIsRepeat(prev => !prev);
   }, []);
 
-  const playPlaylist = useCallback((playlist: Playlist) => {
+  const startPlaylistInternal = useCallback((playlist: Playlist) => {
     const playlistTracks = getTracksForPlaylist(playlist, tracks);
-    if (playlistTracks.length > 0) {
-      playTrack(playlistTracks[0], playlistTracks);
+    const effectiveQueue = playlistTracks.length > 0 ? playlistTracks : tracks;
+    if (effectiveQueue.length > 0) {
+      startTrackInternal(effectiveQueue[0], effectiveQueue);
     }
-  }, [tracks, playTrack]);
+  }, [tracks, startTrackInternal]);
+
+  const playPlaylist = useCallback((playlist: Playlist) => {
+    activeScheduledSessionRef.current = null;
+    setActiveScheduledId(null);
+    startPlaylistInternal(playlist);
+  }, [startPlaylistInternal]);
 
   const playRadio = useCallback((radio: RadioStation) => {
+    activeScheduledSessionRef.current = null;
+    setActiveScheduledId(null);
     // Find matching track for this radio
     const match = tracks.find(t => t.id === radio.currentTrackId) || tracks[0];
     if (match) {
-      playTrack(match, tracks);
+      startTrackInternal(match, tracks);
     }
-  }, [tracks, playTrack]);
+  }, [tracks, startTrackInternal]);
 
   // Favorites management
   const isFavoriteTrack = useCallback((trackId: string) => {
@@ -726,6 +1027,81 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }));
   }, []);
 
+  const addManagedVenue = useCallback((venueData: Omit<ManagedVenue, 'id' | 'licenseNo'> & { licenseNo?: string }): ManagedVenue => {
+    const newVenue: ManagedVenue = {
+      ...venueData,
+      id: `mv-${Date.now()}`,
+      licenseNo: venueData.licenseNo?.trim() || `MZB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}-TR`
+    };
+    setManagedVenues(prev => [newVenue, ...prev]);
+    return newVenue;
+  }, []);
+
+  const updateManagedVenue = useCallback((id: string, updates: Partial<ManagedVenue>) => {
+    setManagedVenues(prev => prev.map(v => (v.id === id ? { ...v, ...updates } : v)));
+  }, []);
+
+  const deleteManagedVenue = useCallback((id: string) => {
+    setManagedVenues(prev => prev.filter(v => v.id !== id));
+  }, []);
+
+  const renewManagedVenue = useCallback((id: string, cycle: 'Aylık' | 'Yıllık') => {
+    setManagedVenues(prev =>
+      prev.map(v => {
+        if (v.id !== id) return v;
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const currentExp = new Date(`${v.expiresAt}T00:00:00`);
+        const base = !isNaN(currentExp.getTime()) && currentExp > now ? currentExp : now;
+        const nextExp = new Date(base);
+        if (cycle === 'Yıllık') {
+          nextExp.setFullYear(nextExp.getFullYear() + 1);
+        } else {
+          nextExp.setMonth(nextExp.getMonth() + 1);
+        }
+        const y = nextExp.getFullYear();
+        const m = String(nextExp.getMonth() + 1).padStart(2, '0');
+        const d = String(nextExp.getDate()).padStart(2, '0');
+        return {
+          ...v,
+          billingCycle: cycle,
+          expiresAt: `${y}-${m}-${d}`,
+          paymentStatus: 'Ödendi'
+        };
+      })
+    );
+  }, []);
+
+  const syncTrackToCloudAsync = useCallback(
+    async (track: Track, targetPlaylistIds?: string[]): Promise<boolean> => {
+      const activeUser = auth.currentUser;
+      if (!activeUser || !activeUser.emailVerified || activeUser.email !== ADMIN_EMAIL) {
+        return false;
+      }
+      setIsCloudSyncing(true);
+      setCloudSyncError(null);
+      try {
+        const autoMatchingIds = findMatchingPlaylistIds(track.genre, track.sectors, playlists);
+        const combinedIds = Array.from(
+          new Set([...(targetPlaylistIds || []), ...autoMatchingIds])
+        );
+        const savedTrack = await saveTrackToCloud(track, combinedIds, activeUser.uid);
+        setTracks((prev) =>
+          prev.map((t) => (t.id === savedTrack.id ? { ...t, ...savedTrack } : t))
+        );
+        setCloudSyncStatus(`"${track.title}" buluta kalıcı olarak kaydedildi.`);
+        return true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Bulut kaydı başarısız oldu.';
+        setCloudSyncError(msg);
+        return false;
+      } finally {
+        setIsCloudSyncing(false);
+      }
+    },
+    [playlists]
+  );
+
   // Admin Catalog actions
   const addTrack = useCallback((trackData: Omit<Track, 'id' | 'playsCount' | 'releaseDate'> & { targetPlaylistIds?: string[] }) => {
     const trackId = `trk-${Date.now()}`;
@@ -733,6 +1109,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     const newTrack: Track = {
       ...pureTrackData,
+      genre: (pureTrackData.genre || '').trim(),
       id: trackId,
       playsCount: Math.floor(Math.random() * 500) + 50,
       releaseDate: new Date().toISOString().split('T')[0]
@@ -742,6 +1119,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (newTrack.audioUrl?.startsWith('data:') || newTrack.audioUrl?.startsWith('blob:') || newTrack.coverUrl?.startsWith('data:')) {
       saveTrackMedia(newTrack.id, newTrack.audioUrl, newTrack.coverUrl).catch(console.error);
     }
+
+    // Remove from deleted list if ever present
+    setDeletedTrackIds(prev => prev.filter(id => id !== newTrack.id));
 
     // Determine matching playlist IDs (automatic from genre/sectors + target playlists)
     const autoMatchingIds = findMatchingPlaylistIds(newTrack.genre, newTrack.sectors, playlists);
@@ -774,37 +1154,92 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }));
     }
 
+    // Persist permanently to Firebase Firestore if authenticated as verified admin
+    if (auth.currentUser?.emailVerified && auth.currentUser?.email === ADMIN_EMAIL) {
+      void syncTrackToCloudAsync(newTrack, combinedPlaylistIds);
+    }
+
     return newTrack;
-  }, [playlists]);
+  }, [playlists, syncTrackToCloudAsync]);
 
   const updateTrack = useCallback((id: string, updates: Partial<Track>) => {
-    setTracks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    const normalizedUpdates: Partial<Track> = updates.genre !== undefined
+      ? { ...updates, genre: updates.genre.trim() }
+      : updates;
+    let updatedTrackSnapshot: Track | null = null;
+    setTracks(prev => prev.map(t => {
+      if (t.id === id) {
+        updatedTrackSnapshot = { ...t, ...normalizedUpdates };
+        return updatedTrackSnapshot;
+      }
+      return t;
+    }));
     if (currentTrack?.id === id) {
-      setCurrentTrack(prev => prev ? { ...prev, ...updates } : null);
+      setCurrentTrack(prev => prev ? { ...prev, ...normalizedUpdates } : null);
     }
-  }, [currentTrack]);
+    if (updatedTrackSnapshot && (updatedTrackSnapshot as Track).audioUrl) {
+      const trk = updatedTrackSnapshot as Track;
+      if (trk.audioUrl.startsWith('data:') || trk.audioUrl.startsWith('blob:') || trk.coverUrl?.startsWith('data:')) {
+        saveTrackMedia(trk.id, trk.audioUrl, trk.coverUrl).catch(console.error);
+      }
+      if (auth.currentUser?.emailVerified && auth.currentUser?.email === ADMIN_EMAIL) {
+        const assignedPlaylistIds = playlists.filter(p => p.trackIds.includes(trk.id)).map(p => p.id);
+        void syncTrackToCloudAsync(trk, assignedPlaylistIds);
+      }
+    }
+  }, [currentTrack, playlists, syncTrackToCloudAsync]);
 
   const deleteTrack = useCallback((id: string) => {
     deleteTrackMedia(id).catch(console.error);
+    setDeletedTrackIds(prev => (prev.includes(id) ? prev : [...prev, id]));
     setTracks(prev => prev.filter(t => t.id !== id));
     setPlaylists(prev => prev.map(p => ({
       ...p,
       trackIds: p.trackIds.filter(tid => tid !== id)
     })));
+    setUser(prev => ({
+      ...prev,
+      favorites: prev.favorites.filter(fid => fid !== id),
+      customPlaylists: prev.customPlaylists.map(cp => ({
+        ...cp,
+        trackIds: cp.trackIds.filter(tid => tid !== id)
+      }))
+    }));
     if (currentTrack?.id === id) {
       audioEngine.stop();
       setIsPlaying(false);
       setCurrentTrack(null);
     }
+
+    // Permanently remove from Firebase Firestore & write deletion tombstone if admin
+    const activeUser = auth.currentUser;
+    if (activeUser?.emailVerified && activeUser?.email === ADMIN_EMAIL) {
+      setIsCloudSyncing(true);
+      setCloudSyncError(null);
+      void deleteTrackFromCloud(id, activeUser.uid)
+        .then(() => {
+          setCloudSyncStatus('Parça buluttan kalıcı olarak silindi.');
+        })
+        .catch((err) => {
+          setCloudSyncError(err instanceof Error ? err.message : 'Bulut silme hatası.');
+        })
+        .finally(() => {
+          setIsCloudSyncing(false);
+        });
+    } else if (!INITIAL_TRACK_IDS.has(id)) {
+      setCloudSyncStatus('Parça yerel olarak silindi; bulut silme için Google Yönetici Girişi yapın.');
+    }
   }, [currentTrack]);
 
   const resetCatalogToDefault = useCallback(() => {
+    setDeletedTrackIds([]);
     setTracks(INITIAL_TRACKS);
     setPlaylists(INITIAL_PLAYLISTS);
     setRadios(INITIAL_RADIOS);
     setGenres(GENRE_CATEGORIES);
     setSectors(VENUE_SECTORS);
     setMoods(INITIAL_MOODS);
+    localStorage.removeItem('muzikbank_deleted_tracks');
     localStorage.removeItem('muzikbank_tracks');
     localStorage.removeItem('muzikbank_playlists');
     localStorage.removeItem('muzikbank_radios');
@@ -813,6 +1248,20 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     localStorage.removeItem('muzikbank_moods');
     localStorage.removeItem('muzibu_tracks');
     localStorage.removeItem('muzibu_playlists');
+
+    if (auth.currentUser?.emailVerified && auth.currentUser?.email === ADMIN_EMAIL) {
+      setIsCloudSyncing(true);
+      void resetCloudCatalog()
+        .then(() => {
+          setCloudSyncStatus('Bulut kataloğu varsayılana sıfırlandı.');
+        })
+        .catch((err) => {
+          setCloudSyncError(err instanceof Error ? err.message : 'Bulut sıfırlama hatası.');
+        })
+        .finally(() => {
+          setIsCloudSyncing(false);
+        });
+    }
   }, []);
 
   // Genres Admin Actions
@@ -833,7 +1282,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   const addTrackToGenre = useCallback((trackId: string, genreName: string) => {
-    setTracks(prev => prev.map(t => t.id === trackId ? { ...t, genre: genreName } : t));
+    const normalizedGenre = genreName.trim();
+    setTracks(prev => prev.map(t => t.id === trackId ? { ...t, genre: normalizedGenre } : t));
   }, []);
 
   const removeTrackFromGenre = useCallback((trackId: string) => {
@@ -961,7 +1411,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
 
     const sharePackage = {
-      app: 'müzikbank Telifsiz Müzik Platformu',
+      app: 'Staff Telifsiz Müzik Platformu',
       timestamp: new Date().toISOString(),
       stats: {
         totalTracks: tracks.length,
@@ -1098,49 +1548,168 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return () => window.clearTimeout(timer);
   }, [activeAutoPlayNotice]);
 
-  // Automatic date/time playback scheduler
-  const schedulerStateRef = useRef({ scheduledPlaylists, playlists, playPlaylist });
-  useEffect(() => {
-    schedulerStateRef.current = { scheduledPlaylists, playlists, playPlaylist };
-  }, [scheduledPlaylists, playlists, playPlaylist]);
+  // Automatic date/time playback scheduler (exact auto-start AND auto-stop)
+  const stopScheduledPlayback = useCallback(() => {
+    audioEngine.stop();
+    setIsPlaying(false);
+    setCurrentTime(0);
+  }, []);
+
+  const schedulerStateRef = useRef({
+    scheduledPlaylists,
+    playlists,
+    startPlaylistInternal,
+    stopScheduledPlayback,
+  });
 
   useEffect(() => {
+    schedulerStateRef.current = {
+      scheduledPlaylists,
+      playlists,
+      startPlaylistInternal,
+      stopScheduledPlayback,
+    };
+  }, [scheduledPlaylists, playlists, startPlaylistInternal, stopScheduledPlayback]);
+
+  useEffect(() => {
+    const formatDateStr = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    const formatClock = (d: Date) =>
+      `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+    const getOccurrenceForBaseDate = (item: ScheduledPlaylist, baseDate: Date) => {
+      const dateStr = formatDateStr(baseDate);
+      const dow = baseDate.getDay();
+      const matchesDate = item.date === dateStr || (Boolean(item.repeatWeekly) && item.dayOfWeek === dow);
+      if (!matchesDate) return null;
+
+      const startDate = new Date(
+        baseDate.getFullYear(),
+        baseDate.getMonth(),
+        baseDate.getDate(),
+        item.startHour,
+        item.startMinute,
+        0,
+        0
+      );
+      const startMs = startDate.getTime();
+      const durationMs = Math.max(60_000, Math.round(item.durationHours * 60 * 60 * 1000));
+      const endMs = startMs + durationMs;
+      const endDate = new Date(endMs);
+
+      return {
+        occurrenceDate: dateStr,
+        startMs,
+        endMs,
+        startLabel: formatClock(startDate),
+        endLabel: formatClock(endDate),
+      };
+    };
+
+    const parseLocalDateStr = (dateStr: string): Date => {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(y, (m || 1) - 1, d || 1);
+    };
+
     const checkSchedule = () => {
-      const { scheduledPlaylists: currentSchedules, playlists: currentPlaylists, playPlaylist: triggerPlay } = schedulerStateRef.current;
-      if (!currentSchedules.length) return;
+      const {
+        scheduledPlaylists: currentSchedules,
+        playlists: currentPlaylists,
+        startPlaylistInternal: triggerScheduledPlay,
+        stopScheduledPlayback: triggerScheduledStop,
+      } = schedulerStateRef.current;
 
       const now = new Date();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const dayOfWeek = now.getDay();
-      const nowMins = now.getHours() * 60 + now.getMinutes();
+      const nowMs = now.getTime();
+      const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
 
-      const candidates = currentSchedules.filter(item => {
-        const matchesDate = item.date === todayStr || (Boolean(item.repeatWeekly) && item.dayOfWeek === dayOfWeek);
-        if (!matchesDate) return false;
-        const slotStart = item.startHour * 60 + item.startMinute;
-        const slotEnd = slotStart + Math.max(1, Math.round(item.durationHours * 60));
-        return nowMins >= slotStart && nowMins < slotEnd && item.lastTriggeredDate !== todayStr;
-      });
+      // 1. Check if an active scheduled broadcast has reached its end time or been removed/moved
+      let endedSession: {
+        scheduleId: string;
+        playlistTitle: string;
+        endLabel: string;
+      } | null = null;
 
-      if (candidates.length === 0) return;
+      const activeSession = activeScheduledSessionRef.current;
+      if (activeSession) {
+        const liveItem = currentSchedules.find(s => s.id === activeSession.scheduleId);
+        const liveWin = liveItem
+          ? getOccurrenceForBaseDate(liveItem, parseLocalDateStr(activeSession.occurrenceDate))
+          : null;
 
-      // Pick the most recently started candidate
-      candidates.sort((a, b) => (b.startHour * 60 + b.startMinute) - (a.startHour * 60 + a.startMinute));
-      const target = candidates[0];
-      const pl = currentPlaylists.find(p => p.id === target.playlistId);
+        if (liveItem && liveWin && nowMs >= liveWin.startMs && nowMs < liveWin.endMs) {
+          // Keep endMs & endLabel dynamically synced in case duration was shortened/edited
+          activeSession.endMs = liveWin.endMs;
+          activeSession.endLabel = liveWin.endLabel;
+        } else {
+          endedSession = {
+            scheduleId: activeSession.scheduleId,
+            playlistTitle: activeSession.playlistTitle,
+            endLabel: activeSession.endLabel,
+          };
+          activeScheduledSessionRef.current = null;
+          setActiveScheduledId(null);
+        }
+      }
 
-      // Mark as triggered for today regardless so we don't spin
-      setScheduledPlaylists(prev => prev.map(item =>
-        item.id === target.id ? { ...item, lastTriggeredDate: todayStr } : item
-      ));
+      // 2. Check for any scheduled playlist whose start time has arrived (including overnight)
+      const candidates: Array<{
+        item: ScheduledPlaylist;
+        win: NonNullable<ReturnType<typeof getOccurrenceForBaseDate>>;
+      }> = [];
 
-      if (pl) {
-        triggerPlay(pl);
-        const timeLabel = `${String(target.startHour).padStart(2, '0')}:${String(target.startMinute).padStart(2, '0')}`;
+      for (const item of currentSchedules) {
+        for (const baseDate of [yesterday, now]) {
+          const win = getOccurrenceForBaseDate(item, baseDate);
+          if (!win) continue;
+          if (nowMs >= win.startMs && nowMs < win.endMs && item.lastTriggeredDate !== win.occurrenceDate) {
+            candidates.push({ item, win });
+          }
+        }
+      }
+
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => b.win.startMs - a.win.startMs);
+        const { item: target, win } = candidates[0];
+        const pl = currentPlaylists.find(p => p.id === target.playlistId);
+
+        setScheduledPlaylists(prev =>
+          prev.map(item =>
+            item.id === target.id ? { ...item, lastTriggeredDate: win.occurrenceDate } : item
+          )
+        );
+
+        if (pl) {
+          activeScheduledSessionRef.current = {
+            scheduleId: target.id,
+            occurrenceDate: win.occurrenceDate,
+            playlistId: pl.id,
+            playlistTitle: pl.title,
+            startLabel: win.startLabel,
+            endLabel: win.endLabel,
+            endMs: win.endMs,
+          };
+          setActiveScheduledId(target.id);
+          triggerScheduledPlay(pl);
+          setActiveAutoPlayNotice({
+            scheduleId: target.id,
+            playlistTitle: pl.title,
+            timeLabel: `${win.startLabel} - ${win.endLabel}`,
+            status: 'started',
+          });
+        }
+        return;
+      }
+
+      // 3. If the previous scheduled broadcast ended and nothing new replaced it, stop playback
+      if (endedSession) {
+        triggerScheduledStop();
         setActiveAutoPlayNotice({
-          scheduleId: target.id,
-          playlistTitle: pl.title,
-          timeLabel
+          scheduleId: endedSession.scheduleId,
+          playlistTitle: endedSession.playlistTitle,
+          timeLabel: endedSession.endLabel,
+          status: 'ended',
         });
       }
     };
@@ -1268,12 +1837,30 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         deleteScheduledPlaylist,
         activeAutoPlayNotice,
         dismissAutoPlayNotice,
+        activeScheduledId,
         activeScheduleDrag,
         setActiveScheduleDrag,
         quickSchedulePlaylistId,
         setQuickSchedulePlaylistId,
         scheduleConflictNotice,
         dismissScheduleConflictNotice,
+        theme,
+        setTheme,
+        toggleTheme,
+        managedVenues,
+        addManagedVenue,
+        updateManagedVenue,
+        deleteManagedVenue,
+        renewManagedVenue,
+        firebaseUser,
+        isFirebaseAdmin,
+        isAuthReady,
+        isCloudSyncing,
+        cloudSyncStatus,
+        cloudSyncError,
+        signInWithGoogleAdmin,
+        signOutFirebaseAdmin,
+        syncTrackToCloudAsync,
       }}
     >
       {children}

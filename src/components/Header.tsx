@@ -2,8 +2,9 @@ import React from 'react';
 import { 
   SlidersHorizontal, 
   User, 
-  LogIn, 
-  Building2
+  LogIn,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useMusic } from '../context/MusicContext';
 
@@ -12,10 +13,11 @@ export const Header: React.FC = () => {
     setIsAdminOpen, 
     setIsPricingModalOpen,
     setIsCorporateModalOpen,
-    activeTab,
     setActiveTab,
     setSelectedPlaylistId,
-    setSelectedSectorName
+    setSelectedSectorName,
+    theme,
+    toggleTheme
   } = useMusic();
 
   const handleLogoClick = () => {
@@ -26,50 +28,63 @@ export const Header: React.FC = () => {
 
   return (
     <header className="h-16 px-6 bg-black/95 border-b border-zinc-900/90 flex items-center justify-between sticky top-0 z-30 select-none">
-      {/* Brand Logo - Positioned at top-left as requested */}
-      <div 
-        onClick={handleLogoClick} 
-        className="cursor-pointer group flex items-center gap-2 select-none"
-        title="müzikbank Ana Sayfa"
+      {/* Top-Left Platform Subtitle */}
+      <span
+        onClick={handleLogoClick}
+        className="hidden sm:inline-block cursor-pointer font-sans text-[11px] leading-none tracking-tight text-white font-medium hover:opacity-85 transition-opacity"
+        title="Staff Ana Sayfa"
       >
-        <div className="flex flex-col">
-          <div className="flex items-center gap-1.5">
-            <span className="text-2xl font-extrabold tracking-tight text-white group-hover:text-purple-400 transition-colors font-sans lowercase">
-              müzikbank
-            </span>
-            <div className="w-2 h-2 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-500 animate-pulse" />
-          </div>
-          <span className="text-[10px] tracking-wider text-zinc-400 uppercase font-medium">
-            Telifsiz Müzik Platformu
-          </span>
-        </div>
+        Telifsiz Müzik Platformu
+      </span>
+
+      {/* Brand Logo - Positioned at top-center as requested */}
+      <div
+        onClick={handleLogoClick}
+        className="absolute left-4 sm:left-1/2 sm:-translate-x-1/2 cursor-pointer group flex items-center justify-center select-none"
+        title="Staff Ana Sayfa"
+      >
+        <img
+          src="/assets/aistudio/image_879df5e1.png"
+          alt="Staff"
+          className={`h-12 w-auto object-contain transition-opacity group-hover:opacity-85 ${
+            theme === 'dark'
+              ? 'invert hue-rotate-180 mix-blend-screen'
+              : 'mix-blend-multiply'
+          }`}
+        />
       </div>
 
       {/* Right Header Navigation & Actions */}
       <div className="flex items-center gap-3">
+        {/* Dark / Light Mode Toggle */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Aydınlık Moda Geç' : 'Karanlık Moda Geç'}
+          aria-label={theme === 'dark' ? 'Aydınlık Moda Geç' : 'Karanlık Moda Geç'}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-purple-500/50 transition-all"
+        >
+          {theme === 'dark' ? (
+            <>
+              <Sun className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden md:inline">Aydınlık</span>
+            </>
+          ) : (
+            <>
+              <Moon className="w-3.5 h-3.5 text-purple-500" />
+              <span className="hidden md:inline">Karanlık</span>
+            </>
+          )}
+        </button>
 
         {/* Admin Paneli Quick Button */}
         <button
           onClick={() => setIsAdminOpen(true)}
-          title="Admin Paneli - Şarkı, Görsel, Mod ve Fiyat Yönetimi"
+          title="Admin Paneli - Şarkı, Görsel, Mod ve Mekan Yönetimi"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 border border-purple-500/50 hover:border-purple-400 shadow-sm shadow-purple-950 transition-all"
         >
           <SlidersHorizontal className="w-3.5 h-3.5 text-purple-400" />
           <span className="hidden sm:inline">Admin</span>
-        </button>
-
-        {/* Mekan Yönetimi Button */}
-        <button
-          onClick={() => setActiveTab('venue-management')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-sm ${
-            activeTab === 'venue-management'
-              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-purple-950/40'
-              : 'text-purple-300 bg-purple-950/40 hover:bg-purple-950/80 border border-purple-800/50 hover:border-purple-600'
-          }`}
-          title="Mekan Yönetimi, Şubeler ve Abonelik Durumu"
-        >
-          <Building2 className="w-3.5 h-3.5 text-purple-400" />
-          <span className="hidden sm:inline">Mekan Yönetimi</span>
         </button>
 
         {/* Action Buttons with Purple Gradient (as requested: "buttonlar mor gradient renkte") */}

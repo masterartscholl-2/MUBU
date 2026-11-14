@@ -11,7 +11,6 @@ import {
   PlusCircle, 
   Sparkles,
   SlidersHorizontal,
-  UserCheck,
   Settings
 } from 'lucide-react';
 import { useMusic } from '../context/MusicContext';
@@ -202,8 +201,7 @@ export const Sidebar: React.FC = () => {
       {/* Bottom User / Quick Action Area */}
       <div className="p-4 bg-zinc-950/80 border-t border-zinc-900">
         <div 
-          onClick={() => handleNav('venue-management')}
-          className="p-3 rounded-2xl bg-gradient-to-b from-zinc-900/80 to-zinc-950 hover:from-purple-950/30 hover:to-zinc-900 border border-zinc-800/80 hover:border-purple-500/40 flex items-center justify-between mb-3 cursor-pointer transition-all group"
+          className="p-3 rounded-2xl bg-gradient-to-b from-zinc-900/80 to-zinc-950 border border-zinc-800/80 flex items-center justify-between mb-3"
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <img
@@ -212,7 +210,7 @@ export const Sidebar: React.FC = () => {
               className="w-8 h-8 rounded-full object-cover border border-purple-500/40 flex-shrink-0"
             />
             <div className="min-w-0">
-              <div className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors truncate">
+              <div className="text-xs font-bold text-white truncate">
                 {user.companyName || user.name}
               </div>
               <div className="text-[10px] text-zinc-400 flex items-center gap-1">
@@ -221,16 +219,6 @@ export const Sidebar: React.FC = () => {
               </div>
             </div>
           </div>
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              handleNav('venue-management');
-            }}
-            title="Mekan Yönetimi ve Şubeleri Aç"
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-purple-300 hover:bg-zinc-800 transition-colors"
-          >
-            <UserCheck className="w-4 h-4" />
-          </button>
         </div>
 
         {/* Primary Purple Gradient Action Button */}
