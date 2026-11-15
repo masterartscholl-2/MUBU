@@ -1292,28 +1292,33 @@ export const MainContent: React.FC = () => {
           </button>
         </div>
 
-        {/* 4 Cards in Row matching screenshot */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* 4 Apple-style Elevated Cards in Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-5 pb-2">
           {featuredPlaylists.map((pl) => {
             const isFav = isFavoritePlaylist(pl.id);
+            const isLight = theme === 'light';
             return (
               <div
                 key={pl.id}
                 onClick={() => playPlaylist(pl)}
-                className="group p-3 rounded-2xl bg-zinc-950/80 border border-zinc-900 hover:border-purple-500/40 transition-all cursor-pointer flex flex-col justify-between"
+                className={`group p-4 rounded-[24px] transition-all duration-300 cursor-pointer flex flex-col justify-between ${
+                  isLight
+                    ? 'bg-white border border-black/[0.05] shadow-[0_2px_10px_rgba(0,0,0,0.06),0_12px_28px_rgba(0,0,0,0.14)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.08),0_20px_40px_rgba(0,0,0,0.19)] hover:-translate-y-0.5'
+                    : 'bg-[#141418] border border-white/[0.08] shadow-[0_4px_14px_rgba(0,0,0,0.5),0_14px_32px_rgba(0,0,0,0.78)] hover:border-white/[0.15] hover:shadow-[0_8px_20px_rgba(0,0,0,0.6),0_22px_44px_rgba(0,0,0,0.92)] hover:-translate-y-0.5'
+                }`}
               >
                 <div>
-                  <div className="relative aspect-square rounded-xl overflow-hidden mb-3 bg-zinc-900">
+                  <div className="relative aspect-square rounded-2xl overflow-hidden mb-4 bg-zinc-900 shadow-sm">
                     <img
                       src={pl.coverUrl}
                       alt={pl.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
                     />
-                    
-                    {/* Dark gradient overlay for text readability on card */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
 
-                    {/* Centered big white text overlay matching screenshot (CAPPADOCIA HOUSE, AFRO HOUSE, etc.) */}
+                    {/* Dark gradient overlay for text readability on cover */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-black/20" />
+
+                    {/* Centered big white text overlay */}
                     <div className="absolute inset-0 flex items-center justify-center p-3 text-center pointer-events-none">
                       <span className="text-sm md:text-base font-black tracking-wider text-white uppercase drop-shadow-md">
                         {pl.title}
@@ -1321,30 +1326,78 @@ export const MainContent: React.FC = () => {
                     </div>
 
                     {/* Play button hover */}
-                    <div className="absolute bottom-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="w-9 h-9 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-purple-950">
+                    <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-purple-950/60">
                         <Play className="w-4 h-4 fill-current ml-0.5" />
                       </div>
                     </div>
                   </div>
 
-                  <h3 className="text-sm font-bold text-white group-hover:text-purple-300 transition-colors truncate">
+                  {/* Apple-style warm eyebrow + subtle favorite toggle */}
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span
+                      className={`text-[11px] font-semibold tracking-tight ${
+                        isLight ? 'text-[#bf4800]' : 'text-amber-400'
+                      }`}
+                    >
+                      {pl.type === 'radio' ? 'Canlı Akış' : 'Editör Seçimi'}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavoritePlaylist(pl.id);
+                      }}
+                      title={isFav ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+                      className={`p-1 -mr-1 rounded-full transition-colors ${
+                        isFav
+                          ? 'text-rose-500'
+                          : isLight
+                            ? 'text-zinc-400 hover:text-zinc-700'
+                            : 'text-zinc-500 hover:text-white'
+                      }`}
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-current' : ''}`} />
+                    </button>
+                  </div>
+
+                  <h3
+                    className={`text-[13.5px] font-bold tracking-tight leading-snug line-clamp-2 transition-colors ${
+                      isLight
+                        ? 'text-[#1d1d1f] group-hover:text-purple-700'
+                        : 'text-white group-hover:text-purple-300'
+                    }`}
+                  >
                     {pl.title}
                   </h3>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-zinc-500 mt-2 font-mono">
-                  <span>{pl.durationText || '14s 20dk'}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavoritePlaylist(pl.id);
-                    }}
-                    className={`p-1 rounded transition-colors ${
-                      isFav ? 'text-rose-500' : 'text-zinc-500 hover:text-white'
+                {/* Bottom row: clean sans-serif metadata + Apple circular chevron button */}
+                <div className="flex items-center justify-between gap-2 mt-5">
+                  <span
+                    className={`text-[13px] font-normal tracking-tight ${
+                      isLight ? 'text-[#424245]' : 'text-zinc-400'
                     }`}
                   >
-                    <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-current' : ''}`} />
+                    {pl.durationText || '14s 20dk'}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedPlaylistId(pl.id);
+                    }}
+                    title="Listeyi Görüntüle"
+                    aria-label={`${pl.title} listesini görüntüle`}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+                      isLight
+                        ? 'bg-[#e8e8ed] hover:bg-[#dcdce3] text-[#1d1d1f]'
+                        : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100'
+                    }`}
+                  >
+                    <ChevronRight className="w-4 h-4 stroke-[2.25]" />
                   </button>
                 </div>
               </div>
